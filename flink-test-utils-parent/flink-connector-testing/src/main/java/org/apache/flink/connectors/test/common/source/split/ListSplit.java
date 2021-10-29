@@ -16,12 +16,30 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external.sink;
+package org.apache.flink.connectors.test.common.source.split;
 
-import java.util.List;
+import org.apache.flink.api.connector.source.SourceSplit;
 
-public interface SinkDataReader<T> extends AutoCloseable {
+/** The split of the list source. */
+public class ListSplit implements SourceSplit {
+    public static final String SPLIT_ID = "fakeSplitId";
 
-    /** Read records written to the external system. */
-    List<T> poll(long timeoutMs);
+    private int emitNum;
+
+    public ListSplit(int emitNum) {
+        this.emitNum = emitNum;
+    }
+
+    public int getEmitNum() {
+        return emitNum;
+    }
+
+    public void setEmitNum(int emitNum) {
+        this.emitNum = emitNum;
+    }
+
+    @Override
+    public String splitId() {
+        return SPLIT_ID;
+    }
 }

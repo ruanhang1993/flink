@@ -19,13 +19,16 @@
 package org.apache.flink.tests.util.kafka;
 
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContextFactory;
+import org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext;
+import org.apache.flink.connector.kafka.source.testutils.table.KafkaTableSourceExternalContextFactory;
 import org.apache.flink.connectors.test.common.external.DefaultContainerizedExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.Semantic;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
-import org.apache.flink.connectors.test.common.testsuites.SourceTestSuiteBase;
+import org.apache.flink.connectors.test.common.testsuites.TableSourceTestSuiteBase;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.types.DataType;
 import org.apache.flink.tests.util.TestUtils;
 import org.apache.flink.tests.util.flink.FlinkContainerTestEnvironment;
 import org.apache.flink.util.DockerImageVersions;
@@ -34,15 +37,13 @@ import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.Arrays;
+import java.util.List;
 
-import static org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext.SplitMappingMode.PARTITION;
-import static org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext.SplitMappingMode.TOPIC;
-
-/** Kafka E2E test based on connector testing framework. */
-@SuppressWarnings("unused")
-public class KafkaSourceE2ECase extends SourceTestSuiteBase<String> {
+/** Kafka table source E2E test based on connector testing framework. */
+public class KafkaTableSourceE2ECase extends TableSourceTestSuiteBase {
     private static final String KAFKA_HOSTNAME = "kafka";
 
+    @SuppressWarnings("unused")
     @Semantic
     DeliveryGuarantee[] semantics = new DeliveryGuarantee[] {DeliveryGuarantee.EXACTLY_ONCE};
 
@@ -56,30 +57,61 @@ public class KafkaSourceE2ECase extends SourceTestSuiteBase<String> {
                     .fromContainer(
                             new KafkaContainer(DockerImageName.parse(DockerImageVersions.KAFKA))
                                     .withNetworkAliases(KAFKA_HOSTNAME))
-                    .bindWithFlinkContainer(flink.getFlinkContainers().getJobManager())
+                    .bindWithFlinkContainer(flink.getFlinkContainer())
                     .build();
 
     // Defines 2 External context Factories, so test cases will be invoked twice using these two
     // kinds of external contexts.
     @SuppressWarnings("unused")
     @Context
-    KafkaSourceExternalContextFactory singleTopic =
-            new KafkaSourceExternalContextFactory(
+    KafkaTableSourceExternalContextFactory topicSplitContext =
+            new KafkaTableSourceExternalContextFactory(
                     kafka.getContainer(),
                     Arrays.asList(
-                            TestUtils.getResource("kafka-connector.jar").toUri().toURL(),
-                            TestUtils.getResource("kafka-clients.jar").toUri().toURL()),
-                    PARTITION);
+                            TestUtils.getResource("kafka-connector.jar")
+                                    .toAbsolutePath()
+                                    .toUri()
+                                    .toURL(),
+                            TestUtils.getResource("kafka-clients.jar")
+                                    .toAbsolutePath()
+                                    .toUri()
+                                    .toURL()),
+                    KafkaSourceExternalContext.SplitMappingMode.TOPIC);
 
     @SuppressWarnings("unused")
     @Context
-    KafkaSourceExternalContextFactory multipleTopic =
-            new KafkaSourceExternalContextFactory(
+    KafkaTableSourceExternalContextFactory partitionSplitContext =
+            new KafkaTableSourceExternalContextFactory(
                     kafka.getContainer(),
                     Arrays.asList(
-                            TestUtils.getResource("kafka-connector.jar").toUri().toURL(),
-                            TestUtils.getResource("kafka-clients.jar").toUri().toURL()),
-                    TOPIC);
+                            TestUtils.getResource("kafka-connector.jar")
+                                    .toAbsolutePath()
+                                    .toUri()
+                                    .toURL(),
+                            TestUtils.getResource("kafka-clients.jar")
+                                    .toAbsolutePath()
+                                    .toUri()
+                                    .toURL()),
+                    KafkaSourceExternalContext.SplitMappingMode.PARTITION);
 
-    public KafkaSourceE2ECase() throws Exception {}
+    public KafkaTableSourceE2ECase() throws Exception {}
+
+    @Override
+    public List<DataType> supportTypes() {
+        return Arrays.asList(
+                DataTypes.CHAR(2),
+                DataTypes.STRING(),
+                DataTypes.VARCHAR(3),
+                DataTypes.INT(),
+                DataTypes.BIGINT(),
+                DataTypes.SMALLINT(),
+                DataTypes.TINYINT(),
+                DataTypes.DOUBLE(),
+                DataTypes.FLOAT(),
+                DataTypes.BOOLEAN(),
+                DataTypes.DATE(),
+                DataTypes.TIME(),
+                DataTypes.TIMESTAMP(),
+                DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE());
+    }
 }

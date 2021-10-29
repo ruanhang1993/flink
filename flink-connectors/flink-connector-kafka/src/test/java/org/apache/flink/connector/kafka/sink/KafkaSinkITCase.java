@@ -32,6 +32,16 @@ import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.kafka.testutils.KafkaUtil;
+import org.apache.flink.connector.kafka.sink.testutils.KafkaSinkExternalContextFactory;
+import org.apache.flink.connector.kafka.sink.testutils.table.KafkaTableSinkExternalContextFactory;
+import org.apache.flink.connectors.test.common.environment.MiniClusterTestEnvironment;
+import org.apache.flink.connectors.test.common.external.DefaultContainerizedExternalSystem;
+import org.apache.flink.connectors.test.common.junit.annotations.Context;
+import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
+import org.apache.flink.connectors.test.common.junit.annotations.Semantic;
+import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
+import org.apache.flink.connectors.test.common.testsuites.SinkTestSuiteBase;
+import org.apache.flink.connectors.test.common.testsuites.TableSinkTestSuiteBase;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -45,9 +55,12 @@ import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.types.DataType;
 import org.apache.flink.test.util.TestUtils;
 import org.apache.flink.testutils.junit.SharedObjects;
 import org.apache.flink.testutils.junit.SharedReference;
+import org.apache.flink.util.DockerImageVersions;
 import org.apache.flink.util.TestLogger;
 
 import org.apache.flink.shaded.guava30.com.google.common.base.Joiner;
@@ -69,17 +82,20 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Nested;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.Network;
+import org.testcontainers.utility.DockerImageName;
 
 import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -159,6 +175,86 @@ public class KafkaSinkITCase extends TestLogger {
     @After
     public void tearDown() throws ExecutionException, InterruptedException, TimeoutException {
         deleteTestTopic(topic);
+    }
+
+    /** Integration test based on connector testing framework. */
+    @Nested
+    class IntegrationTests extends SinkTestSuiteBase<String> {
+        // Defines test environment on Flink MiniCluster
+        @SuppressWarnings("unused")
+        @TestEnv
+        MiniClusterTestEnvironment flink = new MiniClusterTestEnvironment();
+
+        // Defines external system
+        @ExternalSystem
+        DefaultContainerizedExternalSystem<KafkaContainer> kafka =
+                DefaultContainerizedExternalSystem.builder()
+                        .fromContainer(
+                                new KafkaContainer(
+                                        DockerImageName.parse(DockerImageVersions.KAFKA)))
+                        .build();
+
+        @SuppressWarnings("unused")
+        @Semantic
+        DeliveryGuarantee[] semantics =
+                new DeliveryGuarantee[] {
+                    DeliveryGuarantee.EXACTLY_ONCE, DeliveryGuarantee.AT_LEAST_ONCE
+                };
+
+        @SuppressWarnings("unused")
+        @Context
+        KafkaSinkExternalContextFactory sinkContext =
+                new KafkaSinkExternalContextFactory(kafka.getContainer(), Collections.emptyList());
+    }
+
+    /** Integration test based on connector testing framework. */
+    @Nested
+    class IntegrationTableTests extends TableSinkTestSuiteBase {
+        // Defines test environment on Flink MiniCluster
+        @SuppressWarnings("unused")
+        @TestEnv
+        MiniClusterTestEnvironment flink = new MiniClusterTestEnvironment();
+
+        // Defines external system
+        @ExternalSystem
+        DefaultContainerizedExternalSystem<KafkaContainer> kafka =
+                DefaultContainerizedExternalSystem.builder()
+                        .fromContainer(
+                                new KafkaContainer(
+                                        DockerImageName.parse(DockerImageVersions.KAFKA)))
+                        .build();
+
+        @SuppressWarnings("unused")
+        @Semantic
+        DeliveryGuarantee[] semantics =
+                new DeliveryGuarantee[] {
+                    DeliveryGuarantee.EXACTLY_ONCE, DeliveryGuarantee.AT_LEAST_ONCE
+                };
+
+        @SuppressWarnings("unused")
+        @Context
+        KafkaTableSinkExternalContextFactory sinkContext =
+                new KafkaTableSinkExternalContextFactory(
+                        kafka.getContainer(), Collections.emptyList());
+
+        @Override
+        public List<DataType> supportTypes() {
+            return Arrays.asList(
+                    DataTypes.CHAR(2),
+                    DataTypes.STRING(),
+                    DataTypes.VARCHAR(3),
+                    DataTypes.INT(),
+                    DataTypes.BIGINT(),
+                    DataTypes.SMALLINT(),
+                    DataTypes.TINYINT(),
+                    DataTypes.DOUBLE(),
+                    DataTypes.FLOAT(),
+                    DataTypes.BOOLEAN(),
+                    DataTypes.DATE(),
+                    DataTypes.TIME(),
+                    DataTypes.TIMESTAMP(),
+                    DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE());
+        }
     }
 
     @Test

@@ -16,12 +16,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external.sink;
+package org.apache.flink.connectors.test.common.junit.annotations;
 
-import java.util.List;
+import org.apache.flink.annotation.Experimental;
 
-public interface SinkDataReader<T> extends AutoCloseable {
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-    /** Read records written to the external system. */
-    List<T> poll(long timeoutMs);
-}
+/**
+ * Marks the field in test class defining supported semantic: {@link
+ * org.apache.flink.connector.base.DeliveryGuarantee}.
+ *
+ * <p>Only one field can be annotated in test class.
+ */
+@Target(ElementType.FIELD)
+@Retention(RetentionPolicy.RUNTIME)
+@Experimental
+public @interface Semantic {}

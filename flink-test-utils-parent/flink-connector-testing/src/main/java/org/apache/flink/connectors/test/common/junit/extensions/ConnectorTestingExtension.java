@@ -19,11 +19,13 @@
 package org.apache.flink.connectors.test.common.junit.extensions;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connectors.test.common.TestResource;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
 import org.apache.flink.connectors.test.common.external.ExternalContextFactory;
 import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
+import org.apache.flink.connectors.test.common.junit.annotations.Semantic;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
 
 import org.junit.jupiter.api.extension.AfterAllCallback;
@@ -65,6 +67,7 @@ public class ConnectorTestingExtension implements BeforeAllCallback, AfterAllCal
     public static final String TEST_ENV_STORE_KEY = "testEnvironment";
     public static final String EXTERNAL_SYSTEM_STORE_KEY = "externalSystem";
     public static final String EXTERNAL_CONTEXT_FACTORIES_STORE_KEY = "externalContext";
+    public static final String SUPPORTED_SEMANTIC_STORE_KEY = "supportedSemantic";
 
     private TestEnvironment testEnvironment;
     private TestResource externalSystem;
@@ -92,6 +95,16 @@ public class ConnectorTestingExtension implements BeforeAllCallback, AfterAllCal
         externalSystem = externalSystems.get(0);
         externalSystem.startUp();
         context.getStore(TEST_RESOURCE_NAMESPACE).put(EXTERNAL_SYSTEM_STORE_KEY, externalSystem);
+
+        // Store supported semantic
+        final List<DeliveryGuarantee[]> semantics =
+                AnnotationSupport.findAnnotatedFieldValues(
+                        context.getRequiredTestInstance(),
+                        Semantic.class,
+                        DeliveryGuarantee[].class);
+        checkExactlyOneAnnotatedField(semantics, Semantic.class);
+        context.getStore(TEST_RESOURCE_NAMESPACE)
+                .put(SUPPORTED_SEMANTIC_STORE_KEY, semantics.get(0));
 
         // Search external context factories
         final List<ExternalContextFactory> externalContextFactories =

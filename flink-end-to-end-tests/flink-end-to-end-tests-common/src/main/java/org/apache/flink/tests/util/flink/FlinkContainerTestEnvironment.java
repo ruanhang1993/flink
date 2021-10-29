@@ -24,6 +24,7 @@ import org.apache.flink.connectors.test.common.environment.ClusterControllable;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
 import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.core.execution.JobClient;
+import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.tests.util.flink.container.FlinkContainers;
@@ -39,6 +40,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.configuration.MetricOptions.METRIC_FETCHER_UPDATE_INTERVAL;
 import static org.apache.flink.configuration.TaskManagerOptions.NUM_TASK_SLOTS;
 
 /** Test environment running job on {@link FlinkContainers}. */
@@ -65,6 +67,7 @@ public class FlinkContainerTestEnvironment implements TestEnvironment, ClusterCo
         config.set(HEARTBEAT_INTERVAL, 1000L);
         config.set(HEARTBEAT_TIMEOUT, 5000L);
         config.set(SLOT_REQUEST_TIMEOUT, 10000L);
+        config.set(METRIC_FETCHER_UPDATE_INTERVAL, 1000L);
         flinkContainers =
                 FlinkContainers.builder()
                         .setNumTaskManagers(numTaskManagers)
@@ -96,6 +99,15 @@ public class FlinkContainerTestEnvironment implements TestEnvironment, ClusterCo
                 envOptions.getConnectorJarPaths().stream()
                         .map(URL::getPath)
                         .collect(Collectors.toList()));
+        if (envOptions.getSavepointRestorePath() != null) {
+            return new RemoteStreamEnvironment(
+                    flinkContainers.getJobManagerHost(),
+                    flinkContainers.getJobManagerPort(),
+                    null,
+                    jarPaths.toArray(new String[0])),
+                    null,
+                    SavepointRestoreSettings.forPath(envOptions.getSavepointRestorePath()));
+        }
         return StreamExecutionEnvironment.createRemoteEnvironment(
                 flinkContainers.getJobManagerHost(),
                 flinkContainers.getJobManagerPort(),

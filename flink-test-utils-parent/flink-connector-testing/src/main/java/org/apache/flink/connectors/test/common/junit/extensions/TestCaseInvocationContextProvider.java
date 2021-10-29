@@ -19,6 +19,7 @@
 package org.apache.flink.connectors.test.common.junit.extensions;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connectors.test.common.environment.ClusterControllable;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
 import org.apache.flink.connectors.test.common.external.ExternalContext;
@@ -34,10 +35,12 @@ import org.junit.jupiter.api.extension.TestTemplateInvocationContext;
 import org.junit.jupiter.api.extension.TestTemplateInvocationContextProvider;
 
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Stream;
 
 import static org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension.EXTERNAL_CONTEXT_FACTORIES_STORE_KEY;
+import static org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension.SUPPORTED_SEMANTIC_STORE_KEY;
 import static org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension.TEST_ENV_STORE_KEY;
 import static org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension.TEST_RESOURCE_NAMESPACE;
 
@@ -77,13 +80,27 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
                         context.getStore(TEST_RESOURCE_NAMESPACE)
                                 .get(EXTERNAL_CONTEXT_FACTORIES_STORE_KEY);
 
+        // Fetch supported semantic from store
+        DeliveryGuarantee[] semantics =
+                (DeliveryGuarantee[])
+                        context.getStore(TEST_RESOURCE_NAMESPACE).get(SUPPORTED_SEMANTIC_STORE_KEY);
+
         // Create a invocation context for each external context factory
         return externalContextFactories.stream()
-                .map(
-                        factory ->
-                                new TestResourceProvidingInvocationContext(
-                                        testEnv,
-                                        factory.createExternalContext(context.getDisplayName())));
+                .flatMap(
+                        factory -> {
+                            List<TestResourceProvidingInvocationContext> result =
+                                    new LinkedList<>();
+                            for (DeliveryGuarantee semantic : semantics) {
+                                result.add(
+                                        new TestResourceProvidingInvocationContext(
+                                                testEnv,
+                                                factory.createExternalContext(
+                                                        context.getDisplayName()),
+                                                semantic));
+                            }
+                            return result.stream();
+                        });
     }
 
     /**
@@ -94,18 +111,21 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
 
         private final TestEnvironment testEnvironment;
         private final ExternalContext externalContext;
+        private final DeliveryGuarantee semantic;
 
         public TestResourceProvidingInvocationContext(
-                TestEnvironment testEnvironment, ExternalContext externalContext) {
+                TestEnvironment testEnvironment, ExternalContext externalContext,
+                DeliveryGuarantee semantic) {
             this.testEnvironment = testEnvironment;
             this.externalContext = externalContext;
+            this.semantic = semantic;
         }
 
         @Override
         public String getDisplayName(int invocationIndex) {
             return String.format(
-                    "TestEnvironment: [%s], ExternalContext: [%s]",
-                    testEnvironment, externalContext);
+                    "TestEnvironment: [%s], ExternalContext: [%s], Semantic: [%s]",
+                    testEnvironment, externalContext, semantic);
         }
 
         @Override
@@ -115,8 +135,33 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
                     new TestEnvironmentResolver(testEnvironment),
                     new ExternalContextProvider(externalContext),
                     new ClusterControllableProvider(testEnvironment),
+                    new SemanticResolver(semantic),
                     // Extension for closing external context
                     (AfterTestExecutionCallback) ignore -> externalContext.close());
+        }
+    }
+
+    private static class SemanticResolver implements ParameterResolver {
+
+        private final DeliveryGuarantee semantic;
+
+        private SemanticResolver(DeliveryGuarantee semantic) {
+            this.semantic = semantic;
+        }
+
+        @Override
+        public boolean supportsParameter(
+                ParameterContext parameterContext, ExtensionContext extensionContext)
+                throws ParameterResolutionException {
+            return isAssignableFromParameterType(
+                    DeliveryGuarantee.class, parameterContext.getParameter().getType());
+        }
+
+        @Override
+        public Object resolveParameter(
+                ParameterContext parameterContext, ExtensionContext extensionContext)
+                throws ParameterResolutionException {
+            return this.semantic;
         }
     }
 

@@ -43,6 +43,10 @@ import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.configuration.MetricOptions.METRIC_FETCHER_UPDATE_INTERVAL;
+import static org.apache.flink.connectors.test.common.utils.TestUtils.deletePath;
+import static org.apache.flink.runtime.jobgraph.SavepointConfigOptions.SAVEPOINT_PATH;
+
 /** Test environment for running jobs on Flink mini-cluster. */
 @Experimental
 public class MiniClusterTestEnvironment implements TestEnvironment, ClusterControllable {
@@ -60,9 +64,12 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
     private boolean isStarted = false;
 
     public MiniClusterTestEnvironment() {
+        Configuration conf = new Configuration();
+        conf.set(METRIC_FETCHER_UPDATE_INTERVAL, 1000L);
         this.miniCluster =
                 new MiniClusterWithClientResource(
                         new MiniClusterResourceConfiguration.Builder()
+                                .setConfiguration(conf)
                                 .setNumberTaskManagers(1)
                                 .setNumberSlotsPerTaskManager(6)
                                 .setRpcServiceSharing(RpcServiceSharing.DEDICATED)
@@ -78,7 +85,18 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
     @Override
     public StreamExecutionEnvironment createExecutionEnvironment(
             TestEnvironmentSettings envOptions) {
-        return StreamExecutionEnvironment.getExecutionEnvironment();
+        Configuration configuration = new Configuration();
+        if (envOptions.getSavepointRestorePath() != null) {
+            configuration.set(SAVEPOINT_PATH, envOptions.getSavepointRestorePath());
+        }
+        return new TestStreamEnvironment(
+                this.miniCluster.getMiniCluster(),
+                configuration,
+                this.miniCluster.getNumberSlots(),
+                envOptions.getConnectorJarPaths().stream()
+                        .map(url -> new org.apache.flink.core.fs.Path(url.getPath()))
+                        .collect(Collectors.toList()),
+                Collections.emptyList());
     }
 
     @Override
@@ -145,7 +163,7 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
         }
         isStarted = false;
         this.miniCluster.after();
-        Files.deleteIfExists(this.checkpointStorage);
+        deletePath(this.checkpointStorage);
         LOG.debug("MiniCluster has been tear down");
     }
 

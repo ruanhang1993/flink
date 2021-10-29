@@ -48,7 +48,7 @@ public class MiniClusterExtension implements CustomExtension {
     }
 
     public URI getRestAddres() {
-        return miniClusterResource.getRestAddres();
+        return miniClusterResource.getRestAddress();
     }
 
     @Override

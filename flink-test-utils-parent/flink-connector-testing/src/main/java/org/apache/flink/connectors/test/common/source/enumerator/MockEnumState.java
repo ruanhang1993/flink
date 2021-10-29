@@ -16,12 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external.sink;
+package org.apache.flink.connectors.test.common.source.enumerator;
 
-import java.util.List;
-
-public interface SinkDataReader<T> extends AutoCloseable {
-
-    /** Read records written to the external system. */
-    List<T> poll(long timeoutMs);
-}
+/** Mock enumerator state. */
+public class MockEnumState {}

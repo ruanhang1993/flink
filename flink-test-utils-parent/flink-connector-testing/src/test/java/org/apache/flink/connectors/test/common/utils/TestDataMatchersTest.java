@@ -18,13 +18,13 @@
 
 package org.apache.flink.connectors.test.common.utils;
 
-import org.hamcrest.Description;
-import org.hamcrest.StringDescription;
-import org.hamcrest.TypeSafeDiagnosingMatcher;
+import org.apache.flink.connector.base.DeliveryGuarantee;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,73 +35,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 /** Unit test for {@link TestDataMatchers}. */
 public class TestDataMatchersTest {
-    @Nested
-    class SingleSplitDataMatcherTest {
-        private final List<String> testData = Arrays.asList("alpha", "beta", "gamma");
-
-        @Test
-        public void testPositiveCases() {
-            assertThat(testData.iterator(), TestDataMatchers.matchesSplitTestData(testData));
-            assertThat(
-                    testData.iterator(),
-                    TestDataMatchers.matchesSplitTestData(testData, testData.size()));
-            assertThat(
-                    testData.iterator(),
-                    TestDataMatchers.matchesSplitTestData(testData, testData.size() - 1));
-        }
-
-        @Test
-        public void testMismatch() throws Exception {
-            final List<String> resultData = new ArrayList<>(testData);
-            resultData.set(1, "delta");
-            final Iterator<String> resultIterator = resultData.iterator();
-
-            final TestDataMatchers.SingleSplitDataMatcher<String> matcher =
-                    TestDataMatchers.matchesSplitTestData(testData);
-
-            assertMatcherFailedWithDescription(
-                    resultIterator,
-                    matcher,
-                    "Mismatched record at position 1: Expected 'beta' but was 'delta'");
-        }
-
-        @Test
-        public void testResultMoreThanExpected() throws Exception {
-            final List<String> resultData = new ArrayList<>(testData);
-            resultData.add("delta");
-            final Iterator<String> resultIterator = resultData.iterator();
-
-            final TestDataMatchers.SingleSplitDataMatcher<String> matcher =
-                    TestDataMatchers.matchesSplitTestData(testData);
-
-            assertMatcherFailedWithDescription(
-                    resultIterator,
-                    matcher,
-                    "Expected to have exactly 3 records in result, "
-                            + "but result iterator hasn't reached the end");
-        }
-
-        @Test
-        public void testResultLessThanExpected() throws Exception {
-            final List<String> resultData = new ArrayList<>(testData);
-            resultData.remove(testData.size() - 1);
-            final Iterator<String> resultIterator = resultData.iterator();
-
-            final TestDataMatchers.SingleSplitDataMatcher<String> matcher =
-                    TestDataMatchers.matchesSplitTestData(testData);
-
-            assertMatcherFailedWithDescription(
-                    resultIterator,
-                    matcher,
-                    "Expected to have 3 records in result, but only received 2 records");
-        }
-    }
-
     @Nested
     class MultipleSplitDataMatcherTest {
         private final List<String> splitA = Arrays.asList("alpha", "beta", "gamma");
@@ -112,9 +49,10 @@ public class TestDataMatchersTest {
         @Test
         public void testPositiveCase() {
             final List<String> result = unionLists(splitA, splitB, splitC);
-            assertThat(
-                    result.iterator(),
-                    TestDataMatchers.matchesMultipleSplitTestData(testDataCollection));
+            assertThat(result.iterator())
+                    .satisfies(
+                            TestDataMatchers.matchesMultipleSplitTestData(
+                                    testDataCollection, DeliveryGuarantee.EXACTLY_ONCE));
         }
 
         @Test
@@ -123,7 +61,8 @@ public class TestDataMatchersTest {
             splitATestDataWithoutLast.remove(splitA.size() - 1);
             final List<String> result = unionLists(splitATestDataWithoutLast, splitB, splitC);
             final TestDataMatchers.MultipleSplitDataMatcher<String> matcher =
-                    TestDataMatchers.matchesMultipleSplitTestData(testDataCollection);
+                    TestDataMatchers.matchesMultipleSplitTestData(
+                            testDataCollection, DeliveryGuarantee.EXACTLY_ONCE);
             assertMatcherFailedWithDescription(
                     result.iterator(),
                     matcher,
@@ -148,11 +87,12 @@ public class TestDataMatchersTest {
             final List<String> result = unionLists(splitA, splitB, splitC);
             result.add("delta");
             final TestDataMatchers.MultipleSplitDataMatcher<String> matcher =
-                    TestDataMatchers.matchesMultipleSplitTestData(testDataCollection);
+                    TestDataMatchers.matchesMultipleSplitTestData(
+                            testDataCollection, DeliveryGuarantee.EXACTLY_ONCE);
             assertMatcherFailedWithDescription(
                     result.iterator(),
                     matcher,
-                    "Unexpected record 'delta' at position 9\n"
+                    "Expected to have exactly 9 records in result, but received more records\n"
                             + "Current progress of multiple split test data validation:\n"
                             + "Split 0 (3/3): \n"
                             + "alpha\n"
@@ -174,7 +114,8 @@ public class TestDataMatchersTest {
             Collections.reverse(reverted);
             final List<String> result = unionLists(splitA, splitB, reverted);
             final TestDataMatchers.MultipleSplitDataMatcher<String> matcher =
-                    TestDataMatchers.matchesMultipleSplitTestData(testDataCollection);
+                    TestDataMatchers.matchesMultipleSplitTestData(
+                            testDataCollection, DeliveryGuarantee.EXACTLY_ONCE);
             String expectedDescription =
                     "Unexpected record '3' at position 6\n"
                             + "Current progress of multiple split test data validation:\n"
@@ -203,16 +144,20 @@ public class TestDataMatchersTest {
     }
 
     private <T> void assertMatcherFailedWithDescription(
-            T object, TypeSafeDiagnosingMatcher<T> matcher, String expectedDescription)
+            Iterator<T> object,
+            TestDataMatchers.MultipleSplitDataMatcher<T> matcher,
+            String expectedDescription)
             throws Exception {
         final Method method =
-                TypeSafeDiagnosingMatcher.class.getDeclaredMethod(
-                        "matchesSafely", Object.class, Description.class);
+                TestDataMatchers.MultipleSplitDataMatcher.class.getDeclaredMethod(
+                        "matches", Iterator.class);
         method.setAccessible(true);
-        assertFalse((boolean) method.invoke(matcher, object, new Description.NullDescription()));
+        assertThat((boolean) method.invoke(matcher, object)).isFalse();
 
-        final StringDescription actualDescription = new StringDescription();
-        method.invoke(matcher, object, actualDescription);
-        Assertions.assertEquals(expectedDescription, actualDescription.toString());
+        final Field errorMsg =
+                TestDataMatchers.MultipleSplitDataMatcher.class.getDeclaredField(
+                        "mismatchDescription");
+        errorMsg.setAccessible(true);
+        Assertions.assertEquals(expectedDescription, errorMsg.get(matcher));
     }
 }

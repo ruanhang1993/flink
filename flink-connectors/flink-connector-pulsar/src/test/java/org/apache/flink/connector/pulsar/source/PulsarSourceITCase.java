@@ -18,6 +18,7 @@
 
 package org.apache.flink.connector.pulsar.source;
 
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestContextFactory;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestEnvironment;
 import org.apache.flink.connector.pulsar.testutils.cases.MultipleTopicConsumingContext;
@@ -26,6 +27,7 @@ import org.apache.flink.connector.pulsar.testutils.runtime.PulsarRuntime;
 import org.apache.flink.connectors.test.common.environment.MiniClusterTestEnvironment;
 import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
+import org.apache.flink.connectors.test.common.junit.annotations.Semantic;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
 import org.apache.flink.connectors.test.common.testsuites.SourceTestSuiteBase;
 
@@ -38,6 +40,9 @@ class PulsarSourceITCase extends SourceTestSuiteBase<String> {
 
     // Defines pulsar running environment
     @ExternalSystem PulsarTestEnvironment pulsar = new PulsarTestEnvironment(PulsarRuntime.mock());
+
+    @Semantic
+    DeliveryGuarantee[] semantics = new DeliveryGuarantee[] {DeliveryGuarantee.EXACTLY_ONCE};
 
     // Defines a external context Factories,
     // so test cases will be invoked using this external contexts.

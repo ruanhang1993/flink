@@ -16,12 +16,26 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external.sink;
+package org.apache.flink.connectors.test.common.source.enumerator;
 
-import java.util.List;
+import org.apache.flink.core.io.SimpleVersionedSerializer;
 
-public interface SinkDataReader<T> extends AutoCloseable {
+import java.io.IOException;
 
-    /** Read records written to the external system. */
-    List<T> poll(long timeoutMs);
+/** Mock enumerator state seializer. */
+public class MockEnumStateSerializer implements SimpleVersionedSerializer<MockEnumState> {
+    @Override
+    public int getVersion() {
+        return 0;
+    }
+
+    @Override
+    public byte[] serialize(MockEnumState obj) throws IOException {
+        return new byte[0];
+    }
+
+    @Override
+    public MockEnumState deserialize(int version, byte[] serialized) throws IOException {
+        return new MockEnumState();
+    }
 }

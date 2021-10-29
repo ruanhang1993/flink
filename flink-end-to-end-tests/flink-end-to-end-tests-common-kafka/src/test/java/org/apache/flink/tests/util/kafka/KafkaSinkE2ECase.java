@@ -19,13 +19,13 @@
 package org.apache.flink.tests.util.kafka;
 
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContextFactory;
+import org.apache.flink.connector.kafka.sink.testutils.KafkaSinkExternalContextFactory;
 import org.apache.flink.connectors.test.common.external.DefaultContainerizedExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.Semantic;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
-import org.apache.flink.connectors.test.common.testsuites.SourceTestSuiteBase;
+import org.apache.flink.connectors.test.common.testsuites.SinkTestSuiteBase;
 import org.apache.flink.tests.util.TestUtils;
 import org.apache.flink.tests.util.flink.FlinkContainerTestEnvironment;
 import org.apache.flink.util.DockerImageVersions;
@@ -35,16 +35,16 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.util.Arrays;
 
-import static org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext.SplitMappingMode.PARTITION;
-import static org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext.SplitMappingMode.TOPIC;
-
-/** Kafka E2E test based on connector testing framework. */
+/** Kafka sink E2E test based on connector testing framework. */
 @SuppressWarnings("unused")
-public class KafkaSourceE2ECase extends SourceTestSuiteBase<String> {
+public class KafkaSinkE2ECase extends SinkTestSuiteBase<String> {
     private static final String KAFKA_HOSTNAME = "kafka";
 
     @Semantic
-    DeliveryGuarantee[] semantics = new DeliveryGuarantee[] {DeliveryGuarantee.EXACTLY_ONCE};
+    DeliveryGuarantee[] semantics =
+            new DeliveryGuarantee[] {
+                DeliveryGuarantee.EXACTLY_ONCE, DeliveryGuarantee.AT_LEAST_ONCE
+            };
 
     // Defines TestEnvironment
     @TestEnv FlinkContainerTestEnvironment flink = new FlinkContainerTestEnvironment(1, 6);
@@ -56,30 +56,29 @@ public class KafkaSourceE2ECase extends SourceTestSuiteBase<String> {
                     .fromContainer(
                             new KafkaContainer(DockerImageName.parse(DockerImageVersions.KAFKA))
                                     .withNetworkAliases(KAFKA_HOSTNAME))
-                    .bindWithFlinkContainer(flink.getFlinkContainers().getJobManager())
+                    .bindWithFlinkContainer(flink.getFlinkContainer())
                     .build();
 
     // Defines 2 External context Factories, so test cases will be invoked twice using these two
     // kinds of external contexts.
     @SuppressWarnings("unused")
     @Context
-    KafkaSourceExternalContextFactory singleTopic =
-            new KafkaSourceExternalContextFactory(
+    KafkaSinkExternalContextFactory contextFactory =
+            new KafkaSinkExternalContextFactory(
                     kafka.getContainer(),
                     Arrays.asList(
-                            TestUtils.getResource("kafka-connector.jar").toUri().toURL(),
-                            TestUtils.getResource("kafka-clients.jar").toUri().toURL()),
-                    PARTITION);
+                            TestUtils.getResource("kafka-connector.jar")
+                                    .toAbsolutePath()
+                                    .toUri()
+                                    .toURL(),
+                            TestUtils.getResource("kafka-clients.jar")
+                                    .toAbsolutePath()
+                                    .toUri()
+                                    .toURL(),
+                            TestUtils.getResource("flink-connector-testing.jar")
+                                    .toAbsolutePath()
+                                    .toUri()
+                                    .toURL()));
 
-    @SuppressWarnings("unused")
-    @Context
-    KafkaSourceExternalContextFactory multipleTopic =
-            new KafkaSourceExternalContextFactory(
-                    kafka.getContainer(),
-                    Arrays.asList(
-                            TestUtils.getResource("kafka-connector.jar").toUri().toURL(),
-                            TestUtils.getResource("kafka-clients.jar").toUri().toURL()),
-                    TOPIC);
-
-    public KafkaSourceE2ECase() throws Exception {}
+    public KafkaSinkE2ECase() throws Exception {}
 }
