@@ -93,6 +93,21 @@ public class KafkaTableTestUtils {
         assertEquals(expected, actual);
     }
 
+    public static void waitingEmptyResults(String sinkName, Duration timeout)
+            throws InterruptedException {
+        long now = System.currentTimeMillis();
+        long stop = now + timeout.toMillis();
+        while (System.currentTimeMillis() < stop) {
+            List<String> actual = TestValuesTableFactory.getResults(sinkName);
+            assertEquals(Collections.emptyList(), actual);
+            Thread.sleep(100);
+        }
+
+        // timeout, assert again
+        List<String> actual = TestValuesTableFactory.getResults(sinkName);
+        assertEquals(Collections.emptyList(), actual);
+    }
+
     public static void comparedWithKeyAndOrder(
             Map<Row, List<Row>> expectedData, List<Row> actual, int[] keyLoc) {
         Map<Row, LinkedList<Row>> actualData = new HashMap<>();

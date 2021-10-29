@@ -93,6 +93,7 @@ import java.util.regex.Pattern;
 import static org.apache.flink.core.testutils.FlinkMatchers.containsCause;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptionsUtil.AVRO_CONFLUENT;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptionsUtil.DEBEZIUM_AVRO_CONFLUENT;
+import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptionsUtil.PROPERTIES_PREFIX;
 import static org.apache.flink.table.factories.utils.FactoryMocks.createTableSink;
 import static org.apache.flink.table.factories.utils.FactoryMocks.createTableSource;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -378,6 +379,44 @@ public class KafkaDynamicTableFactoryTest extends TestLogger {
                         ConfigOptions.key(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG)
                                 .booleanType()
                                 .noDefaultValue()));
+    }
+
+    @Test
+    public void testTableSourceSetOffsetReset() {
+        testSetOffsetResetForStartFromGroupOffsets(null);
+        testSetOffsetResetForStartFromGroupOffsets("none");
+        testSetOffsetResetForStartFromGroupOffsets("earliest");
+        testSetOffsetResetForStartFromGroupOffsets("latest");
+    }
+
+    private void testSetOffsetResetForStartFromGroupOffsets(String value) {
+        final Map<String, String> modifiedOptions =
+                getModifiedOptions(
+                        getBasicSourceOptions(),
+                        options -> {
+                            options.remove("scan.startup.mode");
+                            if (value != null) {
+                                options.put(
+                                        PROPERTIES_PREFIX + ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
+                                        value);
+                            }
+                        });
+        final DynamicTableSource tableSource = createTableSource(SCHEMA, modifiedOptions);
+        assertThat(tableSource, instanceOf(KafkaDynamicSource.class));
+        ScanTableSource.ScanRuntimeProvider provider =
+                ((KafkaDynamicSource) tableSource)
+                        .getScanRuntimeProvider(ScanRuntimeProviderContext.INSTANCE);
+        assertThat(provider, instanceOf(DataStreamScanProvider.class));
+        final KafkaSource<?> kafkaSource = assertKafkaSource(provider);
+        final Configuration configuration =
+                KafkaSourceTestUtils.getKafkaSourceConfiguration(kafkaSource);
+
+        if (value == null) {
+            assertEquals(
+                    configuration.toMap().get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG), "none");
+        } else {
+            assertEquals(configuration.toMap().get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG), value);
+        }
     }
 
     @Test

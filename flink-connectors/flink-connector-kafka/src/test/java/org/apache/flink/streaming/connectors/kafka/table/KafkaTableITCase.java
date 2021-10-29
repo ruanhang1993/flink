@@ -27,6 +27,8 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.test.util.SuccessException;
 import org.apache.flink.types.Row;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.kafka.clients.consumer.NoOffsetForPartitionException;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,6 +44,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -51,6 +55,7 @@ import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXE
 import static org.apache.flink.table.utils.TableTestMatchers.deepEqualTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /** Basic IT cases for the Kafka table source and sink. */
@@ -819,6 +824,175 @@ public class KafkaTableITCase extends KafkaTableTestBase {
 
         tableResult.getJobClient().ifPresent(JobClient::cancel);
         deleteTestTopic(topic);
+    }
+
+    @Test
+    public void testStartFromGroupOffsetsLatest() throws Exception {
+        testStartFromGroupOffsets("latest", Collections.emptyList());
+    }
+
+    @Test
+    public void testStartFromGroupOffsetsEarliest() throws Exception {
+        final List<String> expected =
+                Arrays.asList(
+                        "+I[0, 0]", "+I[0, 1]", "+I[0, 2]", "+I[1, 3]", "+I[1, 4]", "+I[1, 5]");
+        testStartFromGroupOffsets("earliest", expected);
+    }
+
+    @Test
+    public void testStartFromGroupOffsetsNone() {
+        try {
+            testStartFromGroupOffsetsWithException("none", Collections.emptyList());
+            fail("None offset reset error.");
+        } catch (Exception e) {
+            Throwable rootCause = ExceptionUtils.getRootCause(e);
+            assertTrue(rootCause instanceof NoOffsetForPartitionException);
+        }
+    }
+
+    private void testStartFromGroupOffsets(String reset, List<String> expected)
+            throws ExecutionException, InterruptedException {
+        // we always use a different topic name for each parameterized topic,
+        // in order to make sure the topic can be created.
+        final String tableName = "Table" + format + reset;
+        final String topic = "groupOffset_" + format + reset;
+        createTestTopic(topic, 4, 1);
+
+        // ---------- Produce an event time stream into Kafka -------------------
+        String groupId = format + reset;
+        String bootstraps = getBootstrapServers();
+        tEnv.getConfig()
+                .getConfiguration()
+                .set(TABLE_EXEC_SOURCE_IDLE_TIMEOUT, Duration.ofMillis(100));
+
+        final String createTableSql =
+                "CREATE TABLE %s (\n"
+                        + "  `partition_id` INT,\n"
+                        + "  `value` INT\n"
+                        + ") WITH (\n"
+                        + "  'connector' = 'kafka',\n"
+                        + "  'topic' = '%s',\n"
+                        + "  'properties.bootstrap.servers' = '%s',\n"
+                        + "  'properties.group.id' = '%s',\n"
+                        + "  'scan.startup.mode' = 'group-offsets',\n"
+                        + "  'properties.auto.offset.reset' = '%s',\n"
+                        + "  'format' = '%s'\n"
+                        + ")";
+        tEnv.executeSql(
+                String.format(
+                        createTableSql, tableName, topic, bootstraps, groupId, reset, format));
+
+        String initialValues =
+                "INSERT INTO "
+                        + tableName
+                        + "\n"
+                        + "VALUES\n"
+                        + " (0, 0),\n"
+                        + " (0, 1),\n"
+                        + " (0, 2),\n"
+                        + " (1, 3),\n"
+                        + " (1, 4),\n"
+                        + " (1, 5)\n";
+        tEnv.executeSql(initialValues).await();
+
+        // ---------- Consume stream from Kafka -------------------
+
+        env.setParallelism(1);
+        String sinkName = "mySink" + format + reset;
+        String createSink =
+                "CREATE TABLE "
+                        + sinkName
+                        + "(\n"
+                        + "  `partition_id` INT,\n"
+                        + "  `value` INT\n"
+                        + ") WITH (\n"
+                        + "  'connector' = 'values'\n"
+                        + ")";
+        tEnv.executeSql(createSink);
+
+        TableResult tableResult =
+                tEnv.executeSql("INSERT INTO " + sinkName + " SELECT * FROM " + tableName);
+
+        if (expected.size() == 0) {
+            KafkaTableTestUtils.waitingEmptyResults(sinkName, Duration.ofSeconds(5));
+        } else {
+            KafkaTableTestUtils.waitingExpectedResults(sinkName, expected, Duration.ofSeconds(5));
+        }
+
+        // ------------- cleanup -------------------
+
+        tableResult.getJobClient().ifPresent(JobClient::cancel);
+
+        deleteTestTopic(topic);
+    }
+
+    private void testStartFromGroupOffsetsWithException(String reset, List<String> expected)
+            throws ExecutionException, InterruptedException {
+        // we always use a different topic name for each parameterized topic,
+        // in order to make sure the topic can be created.
+        final String tableName = reset + "Table";
+        final String topic = "groupOffset_" + format;
+        createTestTopic(topic, 4, 1);
+
+        // ---------- Produce an event time stream into Kafka -------------------
+        String groupId = reset + (new Random()).nextInt();
+        String bootstraps = getBootstrapServers();
+        tEnv.getConfig()
+                .getConfiguration()
+                .set(TABLE_EXEC_SOURCE_IDLE_TIMEOUT, Duration.ofMillis(100));
+
+        final String createTableSql =
+                "CREATE TABLE %s (\n"
+                        + "  `partition_id` INT,\n"
+                        + "  `value` INT\n"
+                        + ") WITH (\n"
+                        + "  'connector' = 'kafka',\n"
+                        + "  'topic' = '%s',\n"
+                        + "  'properties.bootstrap.servers' = '%s',\n"
+                        + "  'properties.group.id' = '%s',\n"
+                        + "  'scan.startup.mode' = 'group-offsets',\n"
+                        + "  'properties.auto.offset.reset' = '%s',\n"
+                        + "  'format' = '%s'\n"
+                        + ")";
+        tEnv.executeSql(
+                String.format(
+                        createTableSql, tableName, topic, bootstraps, groupId, reset, format));
+
+        String initialValues =
+                "INSERT INTO "
+                        + tableName
+                        + "\n"
+                        + "VALUES\n"
+                        + " (0, 0),\n"
+                        + " (0, 1),\n"
+                        + " (0, 2),\n"
+                        + " (1, 3),\n"
+                        + " (1, 4),\n"
+                        + " (1, 5)\n";
+        tEnv.executeSql(initialValues).await();
+
+        // ---------- Consume stream from Kafka -------------------
+
+        env.setParallelism(1);
+        String createSink =
+                "CREATE TABLE MySink(\n"
+                        + "  `partition_id` INT,\n"
+                        + "  `value` INT\n"
+                        + ") WITH (\n"
+                        + "  'connector' = 'values'\n"
+                        + ")";
+        tEnv.executeSql(createSink);
+
+        TableResult tableResult = tEnv.executeSql("INSERT INTO MySink SELECT * FROM " + tableName);
+        try {
+            tableResult.await();
+        } catch (Exception e) {
+            throw e;
+        } finally {
+            // ------------- cleanup -------------------
+            tableResult.getJobClient().ifPresent(JobClient::cancel);
+            deleteTestTopic(topic);
+        }
     }
 
     // --------------------------------------------------------------------------------------------

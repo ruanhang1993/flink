@@ -50,7 +50,9 @@ import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.utils.DataTypeUtils;
 import org.apache.flink.util.Preconditions;
 
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 
@@ -62,6 +64,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -393,7 +396,16 @@ public class KafkaDynamicSource
                 kafkaSourceBuilder.setStartingOffsets(OffsetsInitializer.latest());
                 break;
             case GROUP_OFFSETS:
-                kafkaSourceBuilder.setStartingOffsets(OffsetsInitializer.committedOffsets());
+                String offsetResetConfig =
+                        properties.getProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG);
+                if (offsetResetConfig == null) {
+                    kafkaSourceBuilder.setStartingOffsets(OffsetsInitializer.committedOffsets());
+                } else {
+                    kafkaSourceBuilder.setStartingOffsets(
+                            OffsetsInitializer.committedOffsets(
+                                    OffsetResetStrategy.valueOf(
+                                            offsetResetConfig.toUpperCase(Locale.ROOT))));
+                }
                 break;
             case SPECIFIC_OFFSETS:
                 Map<TopicPartition, Long> offsets = new HashMap<>();
