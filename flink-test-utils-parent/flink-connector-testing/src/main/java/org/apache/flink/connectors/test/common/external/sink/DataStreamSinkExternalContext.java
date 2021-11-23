@@ -22,7 +22,6 @@ import org.apache.flink.api.connector.sink.Sink;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.connectors.test.common.external.ExternalContext;
 
-import java.net.URL;
 import java.util.List;
 
 /**
@@ -43,12 +42,6 @@ public interface DataStreamSinkExternalContext<T> extends ExternalContext, Resul
 
     /** Create a reader for consuming data written to the external system by sink. */
     ExternalSystemDataReader<T> createSinkDataReader(TestingSinkSettings sinkSettings);
-
-    /**
-     * Get a list of connector JAR paths. These JAR will be attached to job graph when submitting
-     * test job.
-     */
-    List<URL> getConnectorJarPaths();
 
     /**
      * Generate test data.
