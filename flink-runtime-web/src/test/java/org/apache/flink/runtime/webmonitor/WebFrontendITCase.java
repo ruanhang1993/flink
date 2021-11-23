@@ -124,7 +124,7 @@ public class WebFrontendITCase extends TestLogger {
     }
 
     private int getRestPort() {
-        return CLUSTER.getRestAddres().getPort();
+        return CLUSTER.getRestAddress().getPort();
     }
 
     @Test

@@ -27,6 +27,7 @@ import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connectors.test.common.environment.ClusterControllable;
+import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
 import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
@@ -45,7 +46,6 @@ import org.apache.flink.streaming.api.operators.collect.CollectResultIterator;
 import org.apache.flink.streaming.api.operators.collect.CollectSinkOperator;
 import org.apache.flink.streaming.api.operators.collect.CollectSinkOperatorFactory;
 import org.apache.flink.streaming.api.operators.collect.CollectStreamSink;
-import org.apache.flink.util.CloseableIterator;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.TestInstance;
@@ -238,7 +238,7 @@ public abstract class SourceTestSuiteBase<T> {
         // Step 4: Validate test data
         try (CloseableIterator<T> resultIterator = iteratorBuilder.build(jobClient)) {
             LOG.info("Checking test results");
-            assertThat(resultIterator, matchesMultipleSplitTestData(testRecordsLists));
+            assertThat(iterator, matchesMultipleSplitTestData(testRecordsLists));
         }
     }
 
@@ -343,7 +343,7 @@ public abstract class SourceTestSuiteBase<T> {
     /**
      * Generate a set of test records and write it to the given split writer.
      *
-     * @param externalContext External context
+     * @param context External context
      * @return List of generated test records
      */
     protected List<T> generateAndWriteTestData(

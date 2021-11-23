@@ -20,12 +20,14 @@ package org.apache.flink.connectors.test.common.environment;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.api.common.time.Deadline;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.runtime.highavailability.nonha.embedded.HaLeadershipControl;
 import org.apache.flink.runtime.minicluster.RpcServiceSharing;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
 import org.apache.flink.runtime.testutils.MiniClusterResourceConfiguration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.TestStreamEnvironment;
 import org.apache.flink.test.util.MiniClusterWithClientResource;
 
 import org.slf4j.Logger;
@@ -36,8 +38,10 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 /** Test environment for running jobs on Flink mini-cluster. */
 @Experimental
@@ -47,6 +51,9 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
 
     private final MiniClusterWithClientResource miniCluster;
     private final Path checkpointPath;
+
+    // Temporary storage for checkpoint and savepoint
+    private Path checkpointStorage;
 
     // The index of current running TaskManager
     private int latestTMIndex = 0;
@@ -125,18 +132,20 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
         if (isStarted) {
             return;
         }
+        this.checkpointStorage = Files.createTempDirectory("minicluster-checkpoint");
         this.miniCluster.before();
         LOG.debug("MiniCluster is running");
         isStarted = true;
     }
 
     @Override
-    public void tearDown() {
+    public void tearDown() throws Exception {
         if (!isStarted) {
             return;
         }
         isStarted = false;
         this.miniCluster.after();
+        Files.deleteIfExists(this.checkpointStorage);
         LOG.debug("MiniCluster has been tear down");
     }
 

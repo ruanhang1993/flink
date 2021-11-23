@@ -133,6 +133,7 @@ public class ConnectorTestingExtension implements BeforeAllCallback, AfterAllCal
         }
     }
 
+    @SuppressWarnings("SameParameterValue")
     private void checkAtLeastOneAnnotationField(
             Collection<?> fields, Class<? extends Annotation> annotation) {
         if (fields.isEmpty()) {

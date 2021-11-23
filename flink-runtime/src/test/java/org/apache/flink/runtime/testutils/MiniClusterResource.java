@@ -84,7 +84,7 @@ public class MiniClusterResource extends ExternalResource {
         return restClusterClientConfig;
     }
 
-    public URI getRestAddres() {
+    public URI getRestAddress() {
         return miniCluster.getRestAddress().join();
     }
 
@@ -109,7 +109,8 @@ public class MiniClusterResource extends ExternalResource {
                                             .toMilliseconds()));
 
             final List<CompletableFuture<Acknowledge>> jobCancellationFutures =
-                    miniCluster.listJobs()
+                    miniCluster
+                            .listJobs()
                             .get(
                                     jobCancellationDeadline.timeLeft().toMillis(),
                                     TimeUnit.MILLISECONDS)
@@ -124,7 +125,8 @@ public class MiniClusterResource extends ExternalResource {
             CommonTestUtils.waitUntilCondition(
                     () -> {
                         final long unfinishedJobs =
-                                miniCluster.listJobs()
+                                miniCluster
+                                        .listJobs()
                                         .get(
                                                 jobCancellationDeadline.timeLeft().toMillis(),
                                                 TimeUnit.MILLISECONDS)

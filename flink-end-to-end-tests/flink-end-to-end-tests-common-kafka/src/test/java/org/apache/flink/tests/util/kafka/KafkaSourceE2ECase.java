@@ -37,6 +37,7 @@ import static org.apache.flink.connector.kafka.source.testutils.KafkaSourceExter
 import static org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext.SplitMappingMode.TOPIC;
 
 /** Kafka E2E test based on connector testing framework. */
+@SuppressWarnings("unused")
 public class KafkaSourceE2ECase extends SourceTestSuiteBase<String> {
     private static final String KAFKA_HOSTNAME = "kafka";
 
