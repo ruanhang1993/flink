@@ -22,7 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicNameUtils;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicPartition;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicRange;
-import org.apache.flink.connectors.test.common.external.ExternalContext;
+import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
 
 import org.apache.flink.shaded.guava30.com.google.common.base.Strings;
 
@@ -61,7 +61,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 
 /**
  * A pulsar cluster operator is used for operating pulsar instance. It's serializable for using in
- * {@link ExternalContext}.
+ * {@link DataStreamSourceExternalContext}.
  */
 public class PulsarRuntimeOperator implements Serializable, Closeable {
     private static final long serialVersionUID = -630646912412751301L;

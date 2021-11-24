@@ -18,15 +18,18 @@
 
 package org.apache.flink.tests.util.pulsar;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestContextFactory;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestEnvironment;
 import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
 import org.apache.flink.connectors.test.common.testsuites.SourceTestSuiteBase;
+import org.apache.flink.tests.util.flink.FlinkContainerTestEnvironment;
 import org.apache.flink.tests.util.pulsar.cases.ExclusiveSubscriptionContext;
 import org.apache.flink.tests.util.pulsar.cases.FailoverSubscriptionContext;
-import org.apache.flink.tests.util.pulsar.common.FlinkContainerWithPulsarEnvironment;
 
 import static org.apache.flink.connector.pulsar.testutils.runtime.PulsarRuntime.container;
 
@@ -37,8 +40,7 @@ import static org.apache.flink.connector.pulsar.testutils.runtime.PulsarRuntime.
 public class PulsarSourceOrderedE2ECase extends SourceTestSuiteBase<String> {
 
     // Defines TestEnvironment.
-    @TestEnv
-    FlinkContainerWithPulsarEnvironment flink = new FlinkContainerWithPulsarEnvironment(1, 6);
+    @TestEnv FlinkContainerTestEnvironment flink;
 
     // Defines ConnectorExternalSystem.
     @ExternalSystem

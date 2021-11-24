@@ -39,9 +39,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.configuration.HeartbeatManagerOptions.HEARTBEAT_INTERVAL;
-import static org.apache.flink.configuration.HeartbeatManagerOptions.HEARTBEAT_TIMEOUT;
-import static org.apache.flink.configuration.JobManagerOptions.SLOT_REQUEST_TIMEOUT;
 import static org.apache.flink.configuration.TaskManagerOptions.NUM_TASK_SLOTS;
 
 /** Test environment running job on {@link FlinkContainers}. */
