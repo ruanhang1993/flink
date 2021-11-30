@@ -172,6 +172,25 @@ public class KafkaConnectorOptions {
                     .withDescription(
                             "Optional interval for consumer to discover dynamically created Kafka partitions periodically.");
 
+    public static final ConfigOption<ScanEndMode> SCAN_END_MODE =
+            ConfigOptions.key("scan.end.mode")
+                    .enumType(ScanEndMode.class)
+                    .defaultValue(ScanEndMode.NONE)
+                    .withDescription("End mode for Kafka consumer.");
+
+    public static final ConfigOption<String> SCAN_END_SPECIFIC_OFFSETS =
+            ConfigOptions.key("scan.end.specific-offsets")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Optional offsets used in case of \"specific-offsets\" end mode");
+
+    public static final ConfigOption<Long> SCAN_END_TIMESTAMP_MILLIS =
+            ConfigOptions.key("scan.end.timestamp-millis")
+                    .longType()
+                    .noDefaultValue()
+                    .withDescription("Optional timestamp used in case of \"timestamp\" end mode");
+
     // --------------------------------------------------------------------------------------------
     // Sink specific options
     // --------------------------------------------------------------------------------------------
@@ -276,6 +295,39 @@ public class KafkaConnectorOptions {
         private final InlineElement description;
 
         ScanStartupMode(String value, InlineElement description) {
+            this.value = value;
+            this.description = description;
+        }
+
+        @Override
+        public String toString() {
+            return value;
+        }
+
+        @Override
+        public InlineElement getDescription() {
+            return description;
+        }
+    }
+
+    /** Startup mode for the Kafka consumer, see {@link #SCAN_STARTUP_MODE}. */
+    public enum ScanEndMode implements DescribedEnum {
+        EARLIEST_OFFSET("earliest-offset", text("End at the earliest offset possible.")),
+        LATEST_OFFSET("latest-offset", text("End at the latest offset.")),
+        GROUP_OFFSETS(
+                "group-offsets",
+                text(
+                        "End at committed offsets in ZooKeeper / Kafka brokers of a specific consumer group.")),
+        TIMESTAMP("timestamp", text("End at user-supplied timestamp for each partition.")),
+        SPECIFIC_OFFSETS(
+                "specific-offsets",
+                text("End at user-supplied specific offsets for each partition.")),
+        NONE("none", text("Run as a unbounded source."));
+
+        private final String value;
+        private final InlineElement description;
+
+        ScanEndMode(String value, InlineElement description) {
             this.value = value;
             this.description = description;
         }

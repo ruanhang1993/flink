@@ -49,7 +49,9 @@ import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.utils.DataTypeUtils;
 import org.apache.flink.util.Preconditions;
 
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 
@@ -61,6 +63,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -141,6 +144,24 @@ public class KafkaDynamicSource
      */
     protected final long startupTimestampMillis;
 
+    /**
+     * The startup mode for the contained consumer (default is {@link
+     * org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.ScanEndMode#GROUP_OFFSETS}).
+     */
+    protected final KafkaConnectorOptions.ScanEndMode endMode;
+
+    /**
+     * Specific startup offsets; only relevant when startup mode is {@link
+     * KafkaConnectorOptions.ScanEndMode#SPECIFIC_OFFSETS}.
+     */
+    protected final Map<KafkaTopicPartition, Long> specificEndOffsets;
+
+    /**
+     * The start timestamp to locate partition offsets; only relevant when startup mode is {@link
+     * KafkaConnectorOptions.ScanEndMode#TIMESTAMP}.
+     */
+    protected final long endTimestampMillis;
+
     /** Flag to determine source mode. In upsert mode, it will keep the tombstone message. * */
     protected final boolean upsertMode;
 
@@ -159,6 +180,9 @@ public class KafkaDynamicSource
             StartupMode startupMode,
             Map<KafkaTopicPartition, Long> specificStartupOffsets,
             long startupTimestampMillis,
+            KafkaConnectorOptions.ScanEndMode endMode,
+            Map<KafkaTopicPartition, Long> specificEndOffsets,
+            long endTimestampMillis,
             boolean upsertMode,
             String tableIdentifier) {
         // Format attributes
@@ -190,8 +214,14 @@ public class KafkaDynamicSource
                 Preconditions.checkNotNull(startupMode, "Startup mode must not be null.");
         this.specificStartupOffsets =
                 Preconditions.checkNotNull(
-                        specificStartupOffsets, "Specific offsets must not be null.");
+                        specificStartupOffsets,
+                        "Specific offsets of startup mode must not be null.");
         this.startupTimestampMillis = startupTimestampMillis;
+        this.endMode = Preconditions.checkNotNull(endMode, "End mode must not be null.");
+        this.specificEndOffsets =
+                Preconditions.checkNotNull(
+                        specificEndOffsets, "Specific offsets of end mode must not be null.");
+        this.endTimestampMillis = endTimestampMillis;
         this.upsertMode = upsertMode;
         this.tableIdentifier = tableIdentifier;
     }
@@ -302,6 +332,9 @@ public class KafkaDynamicSource
                         startupMode,
                         specificStartupOffsets,
                         startupTimestampMillis,
+                        endMode,
+                        specificEndOffsets,
+                        endTimestampMillis,
                         upsertMode,
                         tableIdentifier);
         copy.producedDataType = producedDataType;
@@ -406,6 +439,39 @@ public class KafkaDynamicSource
             case TIMESTAMP:
                 kafkaSourceBuilder.setStartingOffsets(
                         OffsetsInitializer.timestamp(startupTimestampMillis));
+                break;
+        }
+
+        switch (endMode) {
+            case EARLIEST_OFFSET:
+                kafkaSourceBuilder.setBounded(OffsetsInitializer.earliest());
+                break;
+            case LATEST_OFFSET:
+                kafkaSourceBuilder.setBounded(OffsetsInitializer.latest());
+                break;
+            case GROUP_OFFSETS:
+                String offsetResetConfig =
+                        properties.getProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG);
+                if (offsetResetConfig == null) {
+                    kafkaSourceBuilder.setBounded(OffsetsInitializer.committedOffsets());
+                } else {
+                    kafkaSourceBuilder.setBounded(
+                            OffsetsInitializer.committedOffsets(
+                                    OffsetResetStrategy.valueOf(
+                                            offsetResetConfig.toUpperCase(Locale.ROOT))));
+                }
+                break;
+            case SPECIFIC_OFFSETS:
+                Map<TopicPartition, Long> offsets = new HashMap<>();
+                specificEndOffsets.forEach(
+                        (tp, offset) ->
+                                offsets.put(
+                                        new TopicPartition(tp.getTopic(), tp.getPartition()),
+                                        offset));
+                kafkaSourceBuilder.setBounded(OffsetsInitializer.offsets(offsets));
+                break;
+            case TIMESTAMP:
+                kafkaSourceBuilder.setBounded(OffsetsInitializer.timestamp(endTimestampMillis));
                 break;
         }
 

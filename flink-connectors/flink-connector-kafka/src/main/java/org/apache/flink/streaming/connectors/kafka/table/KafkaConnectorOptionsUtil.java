@@ -56,6 +56,9 @@ import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOp
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.KEY_FIELDS;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.KEY_FIELDS_PREFIX;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.KEY_FORMAT;
+import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.SCAN_END_MODE;
+import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.SCAN_END_SPECIFIC_OFFSETS;
+import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.SCAN_END_TIMESTAMP_MILLIS;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.SCAN_STARTUP_MODE;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.SCAN_STARTUP_SPECIFIC_OFFSETS;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.SCAN_STARTUP_TIMESTAMP_MILLIS;
@@ -101,6 +104,7 @@ class KafkaConnectorOptionsUtil {
     public static void validateTableSourceOptions(ReadableConfig tableOptions) {
         validateSourceTopic(tableOptions);
         validateScanStartupMode(tableOptions);
+        validateScanEndMode(tableOptions);
     }
 
     public static void validateTableSinkOptions(ReadableConfig tableOptions) {
@@ -183,6 +187,52 @@ class KafkaConnectorOptionsUtil {
                         });
     }
 
+    private static void validateScanEndMode(ReadableConfig tableOptions) {
+        tableOptions
+                .getOptional(SCAN_END_MODE)
+                .ifPresent(
+                        mode -> {
+                            switch (mode) {
+                                case TIMESTAMP:
+                                    if (!tableOptions
+                                            .getOptional(SCAN_END_TIMESTAMP_MILLIS)
+                                            .isPresent()) {
+                                        throw new ValidationException(
+                                                String.format(
+                                                        "'%s' is required in '%s' end mode"
+                                                                + " but missing.",
+                                                        SCAN_END_TIMESTAMP_MILLIS.key(),
+                                                        KafkaConnectorOptions.ScanEndMode
+                                                                .TIMESTAMP));
+                                    }
+
+                                    break;
+                                case SPECIFIC_OFFSETS:
+                                    if (!tableOptions
+                                            .getOptional(SCAN_END_SPECIFIC_OFFSETS)
+                                            .isPresent()) {
+                                        throw new ValidationException(
+                                                String.format(
+                                                        "'%s' is required in '%s' startup mode"
+                                                                + " but missing.",
+                                                        SCAN_END_SPECIFIC_OFFSETS.key(),
+                                                        KafkaConnectorOptions.ScanEndMode
+                                                                .SPECIFIC_OFFSETS));
+                                    }
+                                    if (!isSingleTopic(tableOptions)) {
+                                        throw new ValidationException(
+                                                "Currently Kafka source only supports specific offset for single topic.");
+                                    }
+                                    String specificOffsets =
+                                            tableOptions.get(SCAN_END_SPECIFIC_OFFSETS);
+                                    parseSpecificOffsets(
+                                            specificOffsets, SCAN_END_SPECIFIC_OFFSETS.key());
+
+                                    break;
+                            }
+                        });
+    }
+
     private static void validateSinkPartitioner(ReadableConfig tableOptions) {
         tableOptions
                 .getOptional(SINK_PARTITIONER)
@@ -229,7 +279,11 @@ class KafkaConnectorOptionsUtil {
             // It will be refactored after support specific offset for multiple topics in
             // FLINK-18602. We have already checked tableOptions.get(TOPIC) contains one topic in
             // validateScanStartupMode().
-            buildSpecificOffsets(tableOptions, tableOptions.get(TOPIC).get(0), specificOffsets);
+            buildSpecificOffsets(
+                    tableOptions,
+                    SCAN_STARTUP_SPECIFIC_OFFSETS,
+                    tableOptions.get(TOPIC).get(0),
+                    specificOffsets);
         }
 
         final StartupOptions options = new StartupOptions();
@@ -241,13 +295,40 @@ class KafkaConnectorOptionsUtil {
         return options;
     }
 
+    public static EndOptions getEndOptions(ReadableConfig tableOptions) {
+        final Map<KafkaTopicPartition, Long> specificOffsets = new HashMap<>();
+        final KafkaConnectorOptions.ScanEndMode endMode =
+                tableOptions
+                        .getOptional(SCAN_END_MODE)
+                        .orElse(KafkaConnectorOptions.ScanEndMode.NONE);
+        if (endMode == KafkaConnectorOptions.ScanEndMode.SPECIFIC_OFFSETS) {
+            // It will be refactored after support specific offset for multiple topics in
+            // FLINK-18602. We have already checked tableOptions.get(TOPIC) contains one topic in
+            // validateScanStartupMode().
+            buildSpecificOffsets(
+                    tableOptions,
+                    SCAN_END_SPECIFIC_OFFSETS,
+                    tableOptions.get(TOPIC).get(0),
+                    specificOffsets);
+        }
+
+        final EndOptions options = new EndOptions();
+        options.endMode = endMode;
+        options.specificOffsets = specificOffsets;
+        if (endMode == KafkaConnectorOptions.ScanEndMode.TIMESTAMP) {
+            options.endTimestampMillis = tableOptions.get(SCAN_END_TIMESTAMP_MILLIS);
+        }
+        return options;
+    }
+
     private static void buildSpecificOffsets(
             ReadableConfig tableOptions,
+            ConfigOption<String> offsetOption,
             String topic,
             Map<KafkaTopicPartition, Long> specificOffsets) {
-        String specificOffsetsStrOpt = tableOptions.get(SCAN_STARTUP_SPECIFIC_OFFSETS);
+        String specificOffsetsStrOpt = tableOptions.get(offsetOption);
         final Map<Integer, Long> offsetMap =
-                parseSpecificOffsets(specificOffsetsStrOpt, SCAN_STARTUP_SPECIFIC_OFFSETS.key());
+                parseSpecificOffsets(specificOffsetsStrOpt, offsetOption.key());
         offsetMap.forEach(
                 (partition, offset) -> {
                     final KafkaTopicPartition topicPartition =
@@ -578,6 +659,13 @@ class KafkaConnectorOptionsUtil {
         public StartupMode startupMode;
         public Map<KafkaTopicPartition, Long> specificOffsets;
         public long startupTimestampMillis;
+    }
+
+    /** Kafka end options. * */
+    public static class EndOptions {
+        public KafkaConnectorOptions.ScanEndMode endMode;
+        public Map<KafkaTopicPartition, Long> specificOffsets;
+        public long endTimestampMillis;
     }
 
     private KafkaConnectorOptionsUtil() {}

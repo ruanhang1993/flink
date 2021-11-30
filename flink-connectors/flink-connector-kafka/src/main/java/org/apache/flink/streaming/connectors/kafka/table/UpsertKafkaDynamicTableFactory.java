@@ -141,6 +141,9 @@ public class UpsertKafkaDynamicTableFactory
                 earliest,
                 Collections.emptyMap(),
                 0,
+                KafkaConnectorOptions.ScanEndMode.NONE,
+                Collections.emptyMap(),
+                0,
                 true,
                 context.getObjectIdentifier().asSummaryString());
     }
