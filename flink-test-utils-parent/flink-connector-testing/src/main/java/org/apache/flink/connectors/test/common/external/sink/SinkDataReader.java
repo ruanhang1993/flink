@@ -23,5 +23,5 @@ import java.util.List;
 public interface SinkDataReader<T> extends AutoCloseable {
 
     /** Read records written to the external system. */
-    List<T> readRecords();
+    List<T> poll(long timeout);
 }
