@@ -28,6 +28,7 @@ import org.apache.flink.configuration.TaskManagerOptions;
 
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
@@ -49,6 +50,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /** A builder class for {@link FlinkContainers}. */
 public class FlinkContainersBuilder {
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkContainersBuilder.class);
 
     // Hostname of components within container network
     // Hostname of JobManager container
@@ -309,7 +311,9 @@ public class FlinkContainersBuilder {
         temporaryPaths.forEach(
                 (path) -> {
                     try {
+                        LOG.info("Deleting path {}.", path.toAbsolutePath());
                         FileUtils.deleteDirectory(path.toFile());
+                        LOG.info("Deleting path {} success.", path.toAbsolutePath());
                     } catch (IOException e) {
                         throw new RuntimeException(
                                 String.format(
