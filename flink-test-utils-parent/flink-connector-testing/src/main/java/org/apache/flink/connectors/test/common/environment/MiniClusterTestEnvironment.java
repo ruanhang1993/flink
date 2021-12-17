@@ -31,6 +31,7 @@ import org.apache.flink.test.util.MiniClusterWithClientResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -62,8 +63,24 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
     }
 
     @Override
-    public StreamExecutionEnvironment createExecutionEnvironment() {
+    public StreamExecutionEnvironment createExecutionEnvironment(
+            ExecutionEnvironmentOptions envOptions) {
         return StreamExecutionEnvironment.getExecutionEnvironment();
+    }
+
+    @Override
+    public Endpoint getRestEndpoint() {
+        try {
+            final URI restAddress = this.miniCluster.getMiniCluster().getRestAddress().get();
+            return new Endpoint(restAddress.getHost(), restAddress.getPort());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get REST endpoint of MiniCluster", e);
+        }
+    }
+
+    @Override
+    public String getCheckpointUri() {
+        return null;
     }
 
     @Override

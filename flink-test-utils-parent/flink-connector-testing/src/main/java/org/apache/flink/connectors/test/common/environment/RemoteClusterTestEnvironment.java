@@ -22,13 +22,20 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
 /** Test environment for running test on a remote Flink cluster. */
 @Experimental
 public class RemoteClusterTestEnvironment implements TestEnvironment {
 
     private final String host;
     private final int port;
-    private final String[] jarPath;
+    private final String checkpointUri;
+    private final List<String> jarPaths = new ArrayList<>();
     private final Configuration config;
 
     /**
@@ -36,10 +43,11 @@ public class RemoteClusterTestEnvironment implements TestEnvironment {
      *
      * @param host Hostname of the remote JobManager
      * @param port REST port of the remote JobManager
-     * @param jarPath Path of JARs to be shipped to Flink cluster
+     * @param jarPaths Path of JARs to be shipped to Flink cluster
      */
-    public RemoteClusterTestEnvironment(String host, int port, String... jarPath) {
-        this(host, port, new Configuration(), jarPath);
+    public RemoteClusterTestEnvironment(
+            String host, int port, String checkpointUri, String... jarPaths) {
+        this(host, port, checkpointUri, new Configuration(), jarPaths);
     }
 
     /**
@@ -48,19 +56,26 @@ public class RemoteClusterTestEnvironment implements TestEnvironment {
      * @param host Hostname of the remote JobManager
      * @param port REST port of the remote JobManager
      * @param config Configurations of the test environment
-     * @param jarPath Path of JARs to be shipped to Flink cluster
+     * @param jarPaths Path of JARs to be shipped to Flink cluster
      */
     public RemoteClusterTestEnvironment(
-            String host, int port, Configuration config, String... jarPath) {
+            String host, int port, String checkpointUri, Configuration config, String... jarPaths) {
         this.host = host;
         this.port = port;
+        this.checkpointUri = checkpointUri;
         this.config = config;
-        this.jarPath = jarPath;
+        this.jarPaths.addAll(Arrays.asList(jarPaths));
     }
 
     @Override
-    public StreamExecutionEnvironment createExecutionEnvironment() {
-        return StreamExecutionEnvironment.createRemoteEnvironment(host, port, jarPath);
+    public StreamExecutionEnvironment createExecutionEnvironment(
+            ExecutionEnvironmentOptions envOptions) {
+        jarPaths.addAll(
+                envOptions.connectorJarPaths().stream()
+                        .map(URL::getPath)
+                        .collect(Collectors.toList()));
+        return StreamExecutionEnvironment.createRemoteEnvironment(
+                host, port, config, jarPaths.toArray(new String[0]));
     }
 
     @Override
@@ -68,4 +83,14 @@ public class RemoteClusterTestEnvironment implements TestEnvironment {
 
     @Override
     public void tearDown() {}
+
+    @Override
+    public Endpoint getRestEndpoint() {
+        return new Endpoint(host, port);
+    }
+
+    @Override
+    public String getCheckpointUri() {
+        return checkpointUri;
+    }
 }

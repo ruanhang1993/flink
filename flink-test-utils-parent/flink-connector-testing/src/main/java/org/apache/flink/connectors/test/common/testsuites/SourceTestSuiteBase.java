@@ -24,16 +24,22 @@ import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.time.Deadline;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.connector.source.Boundedness;
+import org.apache.flink.api.connector.source.Source;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connectors.test.common.environment.ClusterControllable;
+import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
-import org.apache.flink.connectors.test.common.external.ExternalContext;
-import org.apache.flink.connectors.test.common.external.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
+import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
 import org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension;
 import org.apache.flink.connectors.test.common.junit.extensions.TestCaseInvocationContextProvider;
 import org.apache.flink.connectors.test.common.junit.extensions.TestLoggerExtension;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.operators.collect.CollectResultIterator;
 import org.apache.flink.streaming.api.operators.collect.CollectSinkOperator;
@@ -45,6 +51,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.opentest4j.TestAbortedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,25 +104,29 @@ public abstract class SourceTestSuiteBase<T> {
      */
     @TestTemplate
     @DisplayName("Test source with single split")
-    public void testSourceSingleSplit(TestEnvironment testEnv, ExternalContext<T> externalContext)
+    public void testSourceSingleSplit(
+            TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext)
             throws Exception {
+        // Step 1: Preparation
+        TestingSourceOptions sourceOptions =
+                new TestingSourceOptions(Boundedness.BOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
+        ExecutionEnvironmentOptions envOptions =
+                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
+        Source<T, ?, ?> source = tryCreateSource(externalContext, sourceOptions);
 
-        // Write test data to external system
-        LOG.info("Writing test data to split 0");
-        final List<T> testRecords = generateAndWriteTestData(0, externalContext);
+        // Step 2: Write test data to external system
+        List<T> testRecords = generateAndWriteTestData(0, externalContext, sourceOptions);
 
-        // Build and execute Flink job
-        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment();
+        // Step 3: Build and execute Flink job
+        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
+        DataStreamSource<T> stream =
+                execEnv.fromSource(source, WatermarkStrategy.noWatermarks(), "Tested Source")
+                        .setParallelism(1);
+        CollectIteratorBuilder<T> iteratorBuilder = addCollectSink(stream);
+        JobClient jobClient = submitJob(execEnv, "Source Single Split Test");
 
-        LOG.info("Submitting Flink job to test environment");
-        try (CloseableIterator<T> resultIterator =
-                execEnv.fromSource(
-                                externalContext.createSource(Boundedness.BOUNDED),
-                                WatermarkStrategy.noWatermarks(),
-                                "Tested Source")
-                        .setParallelism(1)
-                        .executeAndCollect("Source Single Split Test")) {
-            // Check test result
+        // Step 4: Validate test data
+        try (CloseableIterator<T> resultIterator = iteratorBuilder.build(jobClient)) {
             LOG.info("Checking test results");
             assertThat(resultIterator, matchesSplitTestData(testRecords));
         }
@@ -135,26 +146,33 @@ public abstract class SourceTestSuiteBase<T> {
      */
     @TestTemplate
     @DisplayName("Test source with multiple splits")
-    public void testMultipleSplits(TestEnvironment testEnv, ExternalContext<T> externalContext)
+    public void testMultipleSplits(
+            TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext)
             throws Exception {
+        // Step 1: Preparation
+        TestingSourceOptions sourceOptions =
+                new TestingSourceOptions(Boundedness.BOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
+        ExecutionEnvironmentOptions envOptions =
+                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
+        Source<T, ?, ?> source = tryCreateSource(externalContext, sourceOptions);
 
-        final int splitNumber = 4;
-        final List<List<T>> testRecordsLists = new ArrayList<>();
-        LOG.info("Writing test data to split 0 to 3...");
+        // Step 2: Write test data to external system
+        int splitNumber = 4;
+        List<List<T>> testRecordsLists = new ArrayList<>();
         for (int i = 0; i < splitNumber; i++) {
-            testRecordsLists.add(generateAndWriteTestData(i, externalContext));
+            testRecordsLists.add(generateAndWriteTestData(i, externalContext, sourceOptions));
         }
 
-        LOG.info("Submitting Flink job to test environment");
-        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment();
+        // Step 3: Build and execute Flink job
+        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
+        DataStreamSource<T> stream =
+                execEnv.fromSource(source, WatermarkStrategy.noWatermarks(), "Tested Source")
+                        .setParallelism(splitNumber);
+        CollectIteratorBuilder<T> iteratorBuilder = addCollectSink(stream);
+        JobClient jobClient = submitJob(execEnv, "Source Multiple Split Test");
 
-        try (final CloseableIterator<T> resultIterator =
-                execEnv.fromSource(
-                                externalContext.createSource(Boundedness.BOUNDED),
-                                WatermarkStrategy.noWatermarks(),
-                                "Tested Source")
-                        .setParallelism(splitNumber)
-                        .executeAndCollect("Source Multiple Split Test")) {
+        // Step 4: Validate test data
+        try (CloseableIterator<T> resultIterator = iteratorBuilder.build(jobClient)) {
             // Check test result
             LOG.info("Checking test results");
             assertThat(resultIterator, matchesMultipleSplitTestData(testRecordsLists));
@@ -177,25 +195,34 @@ public abstract class SourceTestSuiteBase<T> {
      */
     @TestTemplate
     @DisplayName("Test source with at least one idle parallelism")
-    public void testIdleReader(TestEnvironment testEnv, ExternalContext<T> externalContext)
+    public void testIdleReader(
+            TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext)
             throws Exception {
+        // Step 1: Preparation
+        TestingSourceOptions testingSourceOptions =
+                new TestingSourceOptions(Boundedness.BOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
+        ExecutionEnvironmentOptions envOptions =
+                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
+        Source<T, ?, ?> source = tryCreateSource(externalContext, testingSourceOptions);
 
-        final int splitNumber = 4;
-        final List<List<T>> testRecordsLists = new ArrayList<>();
-        LOG.info("Writing test data to split 0 to 3");
+        // Step 2: Write test data to external system
+        int splitNumber = 4;
+        List<List<T>> testRecordsLists = new ArrayList<>();
         for (int i = 0; i < splitNumber; i++) {
-            testRecordsLists.add(generateAndWriteTestData(i, externalContext));
+            testRecordsLists.add(
+                    generateAndWriteTestData(i, externalContext, testingSourceOptions));
         }
 
-        LOG.info("Submitting Flink job to test environment");
-        try (CloseableIterator<T> resultIterator =
-                testEnv.createExecutionEnvironment()
-                        .fromSource(
-                                externalContext.createSource(Boundedness.BOUNDED),
-                                WatermarkStrategy.noWatermarks(),
-                                "Tested Source")
-                        .setParallelism(splitNumber + 1)
-                        .executeAndCollect("Idle Reader Test")) {
+        // Step 3: Build and execute Flink job
+        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
+        DataStreamSource<T> stream =
+                execEnv.fromSource(source, WatermarkStrategy.noWatermarks(), "Tested Source")
+                        .setParallelism(splitNumber + 1);
+        CollectIteratorBuilder<T> iteratorBuilder = addCollectSink(stream);
+        JobClient jobClient = submitJob(execEnv, "Idle Reader Test");
+
+        // Step 4: Validate test data
+        try (CloseableIterator<T> resultIterator = iteratorBuilder.build(jobClient)) {
             LOG.info("Checking test results");
             assertThat(resultIterator, matchesMultipleSplitTestData(testRecordsLists));
         }
@@ -218,58 +245,47 @@ public abstract class SourceTestSuiteBase<T> {
     @DisplayName("Test TaskManager failure")
     public void testTaskManagerFailure(
             TestEnvironment testEnv,
-            ExternalContext<T> externalContext,
+            DataStreamSourceExternalContext<T> externalContext,
             ClusterControllable controller)
             throws Exception {
-        int splitIndex = 0;
+        // Step 1: Preparation
+        TestingSourceOptions testingSourceOptions =
+                new TestingSourceOptions(
+                        Boundedness.CONTINUOUS_UNBOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
+        ExecutionEnvironmentOptions envOptions =
+                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
+        Source<T, ?, ?> source = tryCreateSource(externalContext, testingSourceOptions);
 
-        LOG.info("Writing test data to split {}", splitIndex);
-        final List<T> testRecordsBeforeFailure =
+        // Step 2: Write test data to external system
+        int splitIndex = 0;
+        List<T> testRecordsBeforeFailure =
                 externalContext.generateTestData(
-                        splitIndex, ThreadLocalRandom.current().nextLong());
-        final SourceSplitDataWriter<T> sourceSplitDataWriter =
-                externalContext.createSourceSplitDataWriter();
+                        testingSourceOptions, splitIndex, ThreadLocalRandom.current().nextLong());
+        SourceSplitDataWriter<T> sourceSplitDataWriter =
+                externalContext.createSourceSplitDataWriter(testingSourceOptions);
+        LOG.info(
+                "Writing {} records for split {} to external system",
+                testRecordsBeforeFailure.size(),
+                splitIndex);
         sourceSplitDataWriter.writeRecords(testRecordsBeforeFailure);
 
-        final StreamExecutionEnvironment env = testEnv.createExecutionEnvironment();
-
-        env.enableCheckpointing(50);
-        final DataStreamSource<T> dataStreamSource =
-                env.fromSource(
-                                externalContext.createSource(Boundedness.CONTINUOUS_UNBOUNDED),
-                                WatermarkStrategy.noWatermarks(),
-                                "Tested Source")
+        // Step 3: Build and execute Flink job
+        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
+        execEnv.enableCheckpointing(50);
+        DataStreamSource<T> stream =
+                execEnv.fromSource(source, WatermarkStrategy.noWatermarks(), "Tested Source")
                         .setParallelism(1);
+        CollectIteratorBuilder<T> iteratorBuilder = addCollectSink(stream);
+        JobClient jobClient = submitJob(execEnv, "TaskManager Failover Test");
 
-        // Since DataStream API doesn't expose job client for executeAndCollect(), we have
-        // to reuse these part of code to get both job client and result iterator :-(
-        // ------------------------------------ START ---------------------------------------------
-        TypeSerializer<T> serializer = dataStreamSource.getType().createSerializer(env.getConfig());
-        String accumulatorName = "dataStreamCollect_" + UUID.randomUUID();
-        CollectSinkOperatorFactory<T> factory =
-                new CollectSinkOperatorFactory<>(serializer, accumulatorName);
-        CollectSinkOperator<T> operator = (CollectSinkOperator<T>) factory.getOperator();
-        CollectResultIterator<T> iterator =
-                new CollectResultIterator<>(
-                        operator.getOperatorIdFuture(),
-                        serializer,
-                        accumulatorName,
-                        env.getCheckpointConfig());
-        CollectStreamSink<T> sink = new CollectStreamSink<>(dataStreamSource, factory);
-        sink.name("Data stream collect sink");
-        env.addOperator(sink.getTransformation());
-
-        LOG.info("Submitting Flink job to test environment");
-        final JobClient jobClient = env.executeAsync("TaskManager Failover Test");
-        iterator.setJobClient(jobClient);
-        // -------------------------------------- END ---------------------------------------------
-
+        // Step 4: Validate records before killing TaskManagers
+        CloseableIterator<T> iterator = iteratorBuilder.build(jobClient);
         LOG.info("Checking records before killing TaskManagers");
         assertThat(
                 iterator,
                 matchesSplitTestData(testRecordsBeforeFailure, testRecordsBeforeFailure.size()));
 
-        // -------------------------------- Trigger failover ---------------------------------------
+        // Step 5: Trigger TaskManager failover
         LOG.info("Trigger TaskManager failover");
         controller.triggerTaskManagerFailover(jobClient, () -> {});
 
@@ -279,24 +295,29 @@ public abstract class SourceTestSuiteBase<T> {
                 Collections.singletonList(JobStatus.RUNNING),
                 Deadline.fromNow(Duration.ofSeconds(30)));
 
-        LOG.info("Writing test data to split {}", splitIndex);
-        final List<T> testRecordsAfterFailure =
+        // Step 6: Write test data again to external system
+        List<T> testRecordsAfterFailure =
                 externalContext.generateTestData(
-                        splitIndex, ThreadLocalRandom.current().nextLong());
+                        testingSourceOptions, splitIndex, ThreadLocalRandom.current().nextLong());
+        LOG.info(
+                "Writing {} records for split {} to external system",
+                testRecordsAfterFailure.size(),
+                splitIndex);
         sourceSplitDataWriter.writeRecords(testRecordsAfterFailure);
 
+        // Step 7: Validate test result
         LOG.info("Checking records after job failover");
         assertThat(
                 iterator,
                 matchesSplitTestData(testRecordsAfterFailure, testRecordsAfterFailure.size()));
 
-        // Clean up
-        iterator.close();
+        // Step 8: Clean up
         CommonTestUtils.terminateJob(jobClient, Duration.ofSeconds(30));
         CommonTestUtils.waitForJobStatus(
                 jobClient,
                 Collections.singletonList(JobStatus.CANCELED),
                 Deadline.fromNow(Duration.ofSeconds(30)));
+        iterator.close();
     }
 
     // ----------------------------- Helper Functions ---------------------------------
@@ -307,12 +328,80 @@ public abstract class SourceTestSuiteBase<T> {
      * @param externalContext External context
      * @return List of generated test records
      */
-    protected List<T> generateAndWriteTestData(int splitIndex, ExternalContext<T> externalContext) {
-        final List<T> testRecords =
+    protected List<T> generateAndWriteTestData(
+            int splitIndex,
+            DataStreamSourceExternalContext<T> externalContext,
+            TestingSourceOptions testingSourceOptions) {
+        List<T> testRecords =
                 externalContext.generateTestData(
-                        splitIndex, ThreadLocalRandom.current().nextLong());
-        LOG.debug("Writing {} records to external system", testRecords.size());
-        externalContext.createSourceSplitDataWriter().writeRecords(testRecords);
+                        testingSourceOptions, splitIndex, ThreadLocalRandom.current().nextLong());
+        LOG.info(
+                "Writing {} records for split {} to external system",
+                testRecords.size(),
+                splitIndex);
+        externalContext.createSourceSplitDataWriter(testingSourceOptions).writeRecords(testRecords);
         return testRecords;
+    }
+
+    protected Source<T, ?, ?> tryCreateSource(
+            DataStreamSourceExternalContext<T> externalContext,
+            TestingSourceOptions sourceOptions) {
+        try {
+            return externalContext.createSource(sourceOptions);
+        } catch (UnsupportedOperationException e) {
+            throw new TestAbortedException("Cannot create source satisfying given options", e);
+        }
+    }
+
+    protected JobClient submitJob(StreamExecutionEnvironment env, String jobName) throws Exception {
+        LOG.info("Submitting Flink job to test environment");
+        return env.executeAsync(jobName);
+    }
+
+    protected CollectIteratorBuilder<T> addCollectSink(DataStream<T> stream) {
+        TypeSerializer<T> serializer =
+                stream.getType().createSerializer(stream.getExecutionConfig());
+        String accumulatorName = "dataStreamCollect_" + UUID.randomUUID();
+        CollectSinkOperatorFactory<T> factory =
+                new CollectSinkOperatorFactory<>(serializer, accumulatorName);
+        CollectSinkOperator<T> operator = (CollectSinkOperator<T>) factory.getOperator();
+        CollectStreamSink<T> sink = new CollectStreamSink<>(stream, factory);
+        sink.name("Data stream collect sink");
+        stream.getExecutionEnvironment().addOperator(sink.getTransformation());
+        return new CollectIteratorBuilder<>(
+                operator,
+                serializer,
+                accumulatorName,
+                stream.getExecutionEnvironment().getCheckpointConfig());
+    }
+
+    protected static class CollectIteratorBuilder<T> {
+
+        private final CollectSinkOperator<T> operator;
+        private final TypeSerializer<T> serializer;
+        private final String accumulatorName;
+        private final CheckpointConfig checkpointConfig;
+
+        protected CollectIteratorBuilder(
+                CollectSinkOperator<T> operator,
+                TypeSerializer<T> serializer,
+                String accumulatorName,
+                CheckpointConfig checkpointConfig) {
+            this.operator = operator;
+            this.serializer = serializer;
+            this.accumulatorName = accumulatorName;
+            this.checkpointConfig = checkpointConfig;
+        }
+
+        protected CollectResultIterator<T> build(JobClient jobClient) {
+            CollectResultIterator<T> iterator =
+                    new CollectResultIterator<>(
+                            operator.getOperatorIdFuture(),
+                            serializer,
+                            accumulatorName,
+                            checkpointConfig);
+            iterator.setJobClient(jobClient);
+            return iterator;
+        }
     }
 }
