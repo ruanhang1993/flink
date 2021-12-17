@@ -18,10 +18,9 @@
 
 package org.apache.flink.tests.util.kafka;
 
-import org.apache.flink.connector.kafka.testutils.KafkaMultipleTopicExternalContext;
-import org.apache.flink.connector.kafka.testutils.KafkaSingleTopicExternalContext;
+import org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContextFactory;
 import org.apache.flink.connectors.test.common.external.DefaultContainerizedExternalSystem;
-import org.apache.flink.connectors.test.common.junit.annotations.ExternalContextFactory;
+import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
 import org.apache.flink.connectors.test.common.testsuites.SourceTestSuiteBase;
@@ -32,18 +31,17 @@ import org.apache.flink.util.DockerImageVersions;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.util.Arrays;
+
+import static org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext.SplitMappingMode.PARTITION;
+import static org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext.SplitMappingMode.TOPIC;
+
 /** Kafka E2E test based on connector testing framework. */
 public class KafkaSourceE2ECase extends SourceTestSuiteBase<String> {
     private static final String KAFKA_HOSTNAME = "kafka";
 
     // Defines TestEnvironment
-    @TestEnv
-    FlinkContainerTestEnvironment flink =
-            new FlinkContainerTestEnvironment(
-                    1,
-                    6,
-                    TestUtils.getResource("kafka-connector.jar").toAbsolutePath().toString(),
-                    TestUtils.getResource("kafka-clients.jar").toAbsolutePath().toString());
+    @TestEnv FlinkContainerTestEnvironment flink = new FlinkContainerTestEnvironment(1, 6);
 
     // Defines ConnectorExternalSystem
     @ExternalSystem
@@ -58,12 +56,24 @@ public class KafkaSourceE2ECase extends SourceTestSuiteBase<String> {
     // Defines 2 External context Factories, so test cases will be invoked twice using these two
     // kinds of external contexts.
     @SuppressWarnings("unused")
-    @ExternalContextFactory
-    KafkaSingleTopicExternalContext.Factory singleTopic =
-            new KafkaSingleTopicExternalContext.Factory(kafka.getContainer());
+    @Context
+    KafkaSourceExternalContextFactory singleTopic =
+            new KafkaSourceExternalContextFactory(
+                    kafka.getContainer(),
+                    Arrays.asList(
+                            TestUtils.getResource("kafka-connector.jar").toUri().toURL(),
+                            TestUtils.getResource("kafka-clients.jar").toUri().toURL()),
+                    PARTITION);
 
     @SuppressWarnings("unused")
-    @ExternalContextFactory
-    KafkaMultipleTopicExternalContext.Factory multipleTopic =
-            new KafkaMultipleTopicExternalContext.Factory(kafka.getContainer());
+    @Context
+    KafkaSourceExternalContextFactory multipleTopic =
+            new KafkaSourceExternalContextFactory(
+                    kafka.getContainer(),
+                    Arrays.asList(
+                            TestUtils.getResource("kafka-connector.jar").toUri().toURL(),
+                            TestUtils.getResource("kafka-clients.jar").toUri().toURL()),
+                    TOPIC);
+
+    public KafkaSourceE2ECase() throws Exception {}
 }
