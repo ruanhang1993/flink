@@ -18,6 +18,7 @@
 
 package org.apache.flink.connector.pulsar.testutils.cases;
 
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.connector.pulsar.source.PulsarSource;
@@ -27,11 +28,14 @@ import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicNameUtils;
 import org.apache.flink.connector.pulsar.testutils.PulsarPartitionDataWriter;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestContext;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestEnvironment;
-import org.apache.flink.connectors.test.common.external.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
 
 import org.apache.pulsar.client.api.RegexSubscriptionMode;
 import org.apache.pulsar.client.api.SubscriptionType;
 
+import java.net.URL;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,11 +59,16 @@ public abstract class MultipleTopicTemplateContext extends PulsarTestContext<Str
             new HashMap<>();
 
     public MultipleTopicTemplateContext(PulsarTestEnvironment environment) {
-        super(environment);
+        this(environment, Collections.emptyList());
+    }
+
+    public MultipleTopicTemplateContext(
+            PulsarTestEnvironment environment, List<URL> connectorJarPaths) {
+        super(environment, connectorJarPaths);
     }
 
     @Override
-    public Source<String, ?, ?> createSource(Boundedness boundedness) {
+    public Source<String, ?, ?> createSource(TestingSourceOptions sourceOptions) {
         PulsarSourceBuilder<String> builder =
                 PulsarSource.builder()
                         .setDeserializationSchema(pulsarSchema(STRING))
@@ -68,7 +77,7 @@ public abstract class MultipleTopicTemplateContext extends PulsarTestContext<Str
                         .setTopicPattern(topicPattern, RegexSubscriptionMode.AllTopics)
                         .setSubscriptionType(subscriptionType())
                         .setSubscriptionName(subscriptionName());
-        if (boundedness == Boundedness.BOUNDED) {
+        if (sourceOptions.boundedness() == Boundedness.BOUNDED) {
             // Using latest stop cursor for making sure the source could be stopped.
             // This is required for SourceTestSuiteBase.
             builder.setBoundedStopCursor(StopCursor.latest());
@@ -78,7 +87,8 @@ public abstract class MultipleTopicTemplateContext extends PulsarTestContext<Str
     }
 
     @Override
-    public SourceSplitDataWriter<String> createSourceSplitDataWriter() {
+    public SourceSplitDataWriter<String> createSourceSplitDataWriter(
+            TestingSourceOptions sourceOptions) {
         String topicName = topicPattern.replace("[0-9]+", String.valueOf(numTopics));
         operator.createTopic(topicName, 1);
 
@@ -92,8 +102,14 @@ public abstract class MultipleTopicTemplateContext extends PulsarTestContext<Str
     }
 
     @Override
-    public List<String> generateTestData(int splitIndex, long seed) {
+    public List<String> generateTestData(
+            TestingSourceOptions sourceOptions, int splitIndex, long seed) {
         return generateStringTestData(splitIndex, seed);
+    }
+
+    @Override
+    public TypeInformation<String> getTestDataTypeInformation() {
+        return TypeInformation.of(String.class);
     }
 
     @Override

@@ -20,7 +20,7 @@ package org.apache.flink.tests.util.pulsar;
 
 import org.apache.flink.connector.pulsar.testutils.PulsarTestContextFactory;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestEnvironment;
-import org.apache.flink.connectors.test.common.junit.annotations.ExternalContextFactory;
+import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
 import org.apache.flink.connectors.test.common.testsuites.SourceTestSuiteBase;
@@ -46,11 +46,11 @@ public class PulsarSourceOrderedE2ECase extends SourceTestSuiteBase<String> {
             new PulsarTestEnvironment(container(flink.getFlinkContainers().getJobManager()));
 
     // Defines a set of external context Factories for different test cases.
-    @ExternalContextFactory
+    @Context
     PulsarTestContextFactory<String, ExclusiveSubscriptionContext> exclusive =
             new PulsarTestContextFactory<>(pulsar, ExclusiveSubscriptionContext::new);
 
-    @ExternalContextFactory
+    @Context
     PulsarTestContextFactory<String, FailoverSubscriptionContext> failover =
             new PulsarTestContextFactory<>(pulsar, FailoverSubscriptionContext::new);
 }

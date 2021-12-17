@@ -21,9 +21,12 @@ package org.apache.flink.tests.util.pulsar.common;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.Source;
+import org.apache.flink.connector.base.DeliveryGuarantee;
+import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
-import org.apache.flink.connectors.test.common.external.ExternalContext;
-import org.apache.flink.connectors.test.common.external.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
+import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
 import org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension;
 import org.apache.flink.connectors.test.common.junit.extensions.TestCaseInvocationContextProvider;
 import org.apache.flink.connectors.test.common.junit.extensions.TestLoggerExtension;
@@ -34,7 +37,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -53,14 +55,21 @@ public abstract class UnorderedSourceTestSuiteBase<T> {
     @TestTemplate
     @DisplayName("Test source with one split and four consumers")
     public void testOneSplitWithMultipleConsumers(
-            TestEnvironment testEnv, ExternalContext<T> externalContext) throws Exception {
-        Collection<T> testData =
-                externalContext.generateTestData(0, ThreadLocalRandom.current().nextLong());
-        SourceSplitDataWriter<T> writer = externalContext.createSourceSplitDataWriter();
+            TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext)
+            throws Exception {
+        TestingSourceOptions sourceOptions =
+                new TestingSourceOptions(Boundedness.BOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
+        ExecutionEnvironmentOptions envOptions =
+                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
+        List<T> testData =
+                externalContext.generateTestData(
+                        sourceOptions, 0, ThreadLocalRandom.current().nextLong());
+        SourceSplitDataWriter<T> writer =
+                externalContext.createSourceSplitDataWriter(sourceOptions);
         writer.writeRecords(testData);
 
-        Source<T, ?, ?> source = externalContext.createSource(Boundedness.BOUNDED);
-        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment();
+        Source<T, ?, ?> source = externalContext.createSource(sourceOptions);
+        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
         List<T> results =
                 execEnv.fromSource(source, WatermarkStrategy.noWatermarks(), "Pulsar source")
                         .setParallelism(4)

@@ -19,8 +19,9 @@
 package org.apache.flink.connector.pulsar.testutils;
 
 import org.apache.flink.connector.pulsar.testutils.runtime.PulsarRuntimeOperator;
-import org.apache.flink.connectors.test.common.external.ExternalContext;
+import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -28,16 +29,18 @@ import java.util.Random;
 import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
 
 /** Common test context for pulsar based test. */
-public abstract class PulsarTestContext<T> implements ExternalContext<T> {
+public abstract class PulsarTestContext<T> implements DataStreamSourceExternalContext<T> {
     private static final long serialVersionUID = 4717940854368532130L;
 
     private static final int NUM_RECORDS_UPPER_BOUND = 500;
     private static final int NUM_RECORDS_LOWER_BOUND = 100;
 
     protected final PulsarRuntimeOperator operator;
+    protected final List<URL> connectorJarPaths;
 
-    protected PulsarTestContext(PulsarTestEnvironment environment) {
+    protected PulsarTestContext(PulsarTestEnvironment environment, List<URL> connectorJarPaths) {
         this.operator = environment.operator();
+        this.connectorJarPaths = connectorJarPaths;
     }
 
     // Helper methods for generating data.
@@ -62,5 +65,10 @@ public abstract class PulsarTestContext<T> implements ExternalContext<T> {
     @Override
     public String toString() {
         return displayName();
+    }
+
+    @Override
+    public List<URL> getConnectorJarPaths() {
+        return connectorJarPaths;
     }
 }

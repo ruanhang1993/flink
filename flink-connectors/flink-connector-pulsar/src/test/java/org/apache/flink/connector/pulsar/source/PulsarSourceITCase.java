@@ -24,7 +24,7 @@ import org.apache.flink.connector.pulsar.testutils.cases.MultipleTopicConsumingC
 import org.apache.flink.connector.pulsar.testutils.cases.SingleTopicConsumingContext;
 import org.apache.flink.connector.pulsar.testutils.runtime.PulsarRuntime;
 import org.apache.flink.connectors.test.common.environment.MiniClusterTestEnvironment;
-import org.apache.flink.connectors.test.common.junit.annotations.ExternalContextFactory;
+import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
 import org.apache.flink.connectors.test.common.testsuites.SourceTestSuiteBase;
@@ -41,11 +41,11 @@ class PulsarSourceITCase extends SourceTestSuiteBase<String> {
 
     // Defines a external context Factories,
     // so test cases will be invoked using this external contexts.
-    @ExternalContextFactory
+    @Context
     PulsarTestContextFactory<String, SingleTopicConsumingContext> singleTopic =
             new PulsarTestContextFactory<>(pulsar, SingleTopicConsumingContext::new);
 
-    @ExternalContextFactory
+    @Context
     PulsarTestContextFactory<String, MultipleTopicConsumingContext> multipleTopic =
             new PulsarTestContextFactory<>(pulsar, MultipleTopicConsumingContext::new);
 }

@@ -18,6 +18,7 @@
 
 package org.apache.flink.connector.pulsar.testutils.cases;
 
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.connector.pulsar.source.PulsarSource;
@@ -27,8 +28,11 @@ import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicNameUtils;
 import org.apache.flink.connector.pulsar.testutils.PulsarPartitionDataWriter;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestContext;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestEnvironment;
-import org.apache.flink.connectors.test.common.external.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
 
+import java.net.URL;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,7 +57,12 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
     private int numSplits = 0;
 
     public SingleTopicConsumingContext(PulsarTestEnvironment environment) {
-        super(environment);
+        this(environment, Collections.emptyList());
+    }
+
+    public SingleTopicConsumingContext(
+            PulsarTestEnvironment environment, List<URL> connectorJarPaths) {
+        super(environment, connectorJarPaths);
         this.topicName =
                 TOPIC_NAME_PREFIX + "-" + ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     }
@@ -64,7 +73,7 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
     }
 
     @Override
-    public Source<String, ?, ?> createSource(Boundedness boundedness) {
+    public Source<String, ?, ?> createSource(TestingSourceOptions sourceOptions) {
         PulsarSourceBuilder<String> builder =
                 PulsarSource.builder()
                         .setDeserializationSchema(pulsarSchema(STRING))
@@ -73,7 +82,7 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
                         .setTopics(topicName)
                         .setSubscriptionType(Exclusive)
                         .setSubscriptionName("pulsar-single-topic");
-        if (boundedness == Boundedness.BOUNDED) {
+        if (sourceOptions.boundedness() == Boundedness.BOUNDED) {
             // Using latest stop cursor for making sure the source could be stopped.
             // This is required for SourceTestSuiteBase.
             builder.setBoundedStopCursor(StopCursor.latest());
@@ -83,7 +92,8 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
     }
 
     @Override
-    public SourceSplitDataWriter<String> createSourceSplitDataWriter() {
+    public SourceSplitDataWriter<String> createSourceSplitDataWriter(
+            TestingSourceOptions sourceOptions) {
         if (numSplits == 0) {
             // Create the topic first.
             operator.createTopic(topicName, 1);
@@ -101,8 +111,14 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
     }
 
     @Override
-    public List<String> generateTestData(int splitIndex, long seed) {
+    public List<String> generateTestData(
+            TestingSourceOptions sourceOptions, int splitIndex, long seed) {
         return generateStringTestData(splitIndex, seed);
+    }
+
+    @Override
+    public TypeInformation<String> getTestDataTypeInformation() {
+        return TypeInformation.of(String.class);
     }
 
     @Override
