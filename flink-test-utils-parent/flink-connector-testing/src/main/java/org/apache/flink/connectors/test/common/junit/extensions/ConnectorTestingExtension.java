@@ -21,8 +21,8 @@ package org.apache.flink.connectors.test.common.junit.extensions;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.connectors.test.common.TestResource;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
-import org.apache.flink.connectors.test.common.external.ExternalContext;
-import org.apache.flink.connectors.test.common.junit.annotations.ExternalContextFactory;
+import org.apache.flink.connectors.test.common.external.ExternalContextFactory;
+import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
 
@@ -40,8 +40,8 @@ import java.util.List;
  * A JUnit 5 {@link Extension} for supporting running of connector testing framework.
  *
  * <p>This extension is responsible for searching test resources annotated by {@link TestEnv},
- * {@link ExternalSystem} and {@link ExternalContextFactory}, storing them into storage provided by
- * JUnit, and manage lifecycle of these resources.
+ * {@link ExternalSystem} and {@link Context}, storing them into storage provided by JUnit, and
+ * manage lifecycle of these resources.
  *
  * <p>The extension uses {@link ExtensionContext.Store} for handing over test resources to {@link
  * TestCaseInvocationContextProvider}, which will inject these resources into test cases as
@@ -53,8 +53,8 @@ import java.util.List;
  *   <li>Test environment annotated by {@link TestEnv}, before all test cases in this extension
  *   <li>External system annotated by {@link ExternalSystem}, before all test cases in this
  *       extension
- *   <li>External contexts annotated by {@link ExternalContextFactory}, before each test case in
- *       {@link TestCaseInvocationContextProvider}
+ *   <li>External contexts annotated by {@link Context}, before each test case in {@link
+ *       TestCaseInvocationContextProvider}
  * </ol>
  */
 @Internal
@@ -94,12 +94,12 @@ public class ConnectorTestingExtension implements BeforeAllCallback, AfterAllCal
         context.getStore(TEST_RESOURCE_NAMESPACE).put(EXTERNAL_SYSTEM_STORE_KEY, externalSystem);
 
         // Search external context factories
-        final List<ExternalContext.Factory> externalContextFactories =
+        final List<ExternalContextFactory> externalContextFactories =
                 AnnotationSupport.findAnnotatedFieldValues(
                         context.getRequiredTestInstance(),
-                        ExternalContextFactory.class,
-                        ExternalContext.Factory.class);
-        checkAtLeastOneAnnotationField(externalContextFactories, ExternalContextFactory.class);
+                        Context.class,
+                        ExternalContextFactory.class);
+        checkAtLeastOneAnnotationField(externalContextFactories, Context.class);
         context.getStore(TEST_RESOURCE_NAMESPACE)
                 .put(EXTERNAL_CONTEXT_FACTORIES_STORE_KEY, externalContextFactories);
     }

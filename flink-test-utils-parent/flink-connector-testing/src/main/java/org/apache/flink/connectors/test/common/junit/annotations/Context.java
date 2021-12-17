@@ -20,6 +20,7 @@ package org.apache.flink.connectors.test.common.junit.annotations;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.connectors.test.common.external.ExternalContext;
+import org.apache.flink.connectors.test.common.external.ExternalContextFactory;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -27,7 +28,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks the field in test class defining a {@link ExternalContext.Factory} for constructing {@link
+ * Marks the field in test class defining a {@link ExternalContextFactory} for constructing {@link
  * ExternalContext} before invocation of each test case.
  *
  * <p>Multiple fields can be annotated as external context factory, and these external contexts will
@@ -40,4 +41,4 @@ import java.lang.annotation.Target;
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.RUNTIME)
 @Experimental
-public @interface ExternalContextFactory {}
+public @interface Context {}

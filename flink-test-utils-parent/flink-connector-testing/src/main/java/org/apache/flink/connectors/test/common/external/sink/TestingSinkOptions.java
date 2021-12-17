@@ -16,23 +16,20 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external;
+package org.apache.flink.connectors.test.common.external.sink;
 
-import org.apache.flink.api.connector.sink.Sink;
-import org.apache.flink.api.connector.source.Source;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 
-import java.net.URL;
-import java.util.List;
+/** Options for configuring the sink under testing. */
+public class TestingSinkOptions {
+    private final DeliveryGuarantee deliveryGuarantee;
 
-/**
- * External context for interacting with external system in testing framework.
- *
- * <p>An external context is responsible for provide instances and information related to an
- * external system, such as creating instance of {@link Source} and {@link Sink}, generating test
- * data, and creating data readers or writers for validating the correctness of test data.
- */
-public interface ExternalContext extends AutoCloseable {
+    public TestingSinkOptions(DeliveryGuarantee deliveryGuarantee) {
+        this.deliveryGuarantee = deliveryGuarantee;
+    }
 
-    /** Get URL of connector JARs that will be attached to job graphs when submitting Flink jobs. */
-    List<URL> getConnectorJarPaths();
+    /** The delivery guarantee of the source. */
+    public DeliveryGuarantee deliveryGuarantee() {
+        return deliveryGuarantee;
+    }
 }

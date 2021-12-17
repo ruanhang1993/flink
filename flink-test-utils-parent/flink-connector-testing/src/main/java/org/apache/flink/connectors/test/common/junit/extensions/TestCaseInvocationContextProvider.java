@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.connectors.test.common.environment.ClusterControllable;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
 import org.apache.flink.connectors.test.common.external.ExternalContext;
+import org.apache.flink.connectors.test.common.external.ExternalContextFactory;
 
 import org.junit.jupiter.api.extension.AfterTestExecutionCallback;
 import org.junit.jupiter.api.extension.Extension;
@@ -43,10 +44,9 @@ import static org.apache.flink.connectors.test.common.junit.extensions.Connector
 /**
  * A helper class for injecting test resources into test case as parameters.
  *
- * <p>This provider will resolve {@link TestEnvironment} and {@link ExternalContext.Factory} from
- * the storage in JUnit's {@link ExtensionContext}, inject them into test method, and register a
- * {@link AfterTestExecutionCallback} for closing the external context after the execution of test
- * case.
+ * <p>This provider will resolve {@link TestEnvironment} and {@link ExternalContextFactory} from the
+ * storage in JUnit's {@link ExtensionContext}, inject them into test method, and register a {@link
+ * AfterTestExecutionCallback} for closing the external context after the execution of test case.
  */
 @Internal
 public class TestCaseInvocationContextProvider implements TestTemplateInvocationContextProvider {
@@ -72,8 +72,8 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
                         .get(TEST_ENV_STORE_KEY, TestEnvironment.class);
 
         // Fetch external context factories from store
-        List<ExternalContext.Factory<?>> externalContextFactories =
-                (List<ExternalContext.Factory<?>>)
+        List<ExternalContextFactory<?>> externalContextFactories =
+                (List<ExternalContextFactory<?>>)
                         context.getStore(TEST_RESOURCE_NAMESPACE)
                                 .get(EXTERNAL_CONTEXT_FACTORIES_STORE_KEY);
 
@@ -82,7 +82,8 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
                 .map(
                         factory ->
                                 new TestResourceProvidingInvocationContext(
-                                        testEnv, factory.createExternalContext()));
+                                        testEnv,
+                                        factory.createExternalContext(context.getDisplayName())));
     }
 
     /**
@@ -92,10 +93,10 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
     static class TestResourceProvidingInvocationContext implements TestTemplateInvocationContext {
 
         private final TestEnvironment testEnvironment;
-        private final ExternalContext<?> externalContext;
+        private final ExternalContext externalContext;
 
         public TestResourceProvidingInvocationContext(
-                TestEnvironment testEnvironment, ExternalContext<?> externalContext) {
+                TestEnvironment testEnvironment, ExternalContext externalContext) {
             this.testEnvironment = testEnvironment;
             this.externalContext = externalContext;
         }
@@ -145,9 +146,9 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
 
     private static class ExternalContextProvider implements ParameterResolver {
 
-        private final ExternalContext<?> externalContext;
+        private final ExternalContext externalContext;
 
-        private ExternalContextProvider(ExternalContext<?> externalContext) {
+        private ExternalContextProvider(ExternalContext externalContext) {
             this.externalContext = externalContext;
         }
 

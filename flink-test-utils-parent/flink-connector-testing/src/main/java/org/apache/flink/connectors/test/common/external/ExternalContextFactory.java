@@ -18,21 +18,13 @@
 
 package org.apache.flink.connectors.test.common.external;
 
-import org.apache.flink.api.connector.sink.Sink;
-import org.apache.flink.api.connector.source.Source;
+/** Factory for creating {@link ExternalContext}. */
+public interface ExternalContextFactory<C extends ExternalContext> {
 
-import java.net.URL;
-import java.util.List;
-
-/**
- * External context for interacting with external system in testing framework.
- *
- * <p>An external context is responsible for provide instances and information related to an
- * external system, such as creating instance of {@link Source} and {@link Sink}, generating test
- * data, and creating data readers or writers for validating the correctness of test data.
- */
-public interface ExternalContext extends AutoCloseable {
-
-    /** Get URL of connector JARs that will be attached to job graphs when submitting Flink jobs. */
-    List<URL> getConnectorJarPaths();
+    /**
+     * Create an instance of {@link ExternalContext}
+     *
+     * @param testName name of the current running test
+     */
+    C createExternalContext(String testName);
 }

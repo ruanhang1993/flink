@@ -16,23 +16,23 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external;
+package org.apache.flink.connectors.test.common.external.sink;
 
-import org.apache.flink.api.connector.sink.Sink;
-import org.apache.flink.api.connector.source.Source;
+import org.apache.flink.connectors.test.common.external.ExternalContext;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.types.DataType;
 
-import java.net.URL;
-import java.util.List;
+import java.util.Map;
 
-/**
- * External context for interacting with external system in testing framework.
- *
- * <p>An external context is responsible for provide instances and information related to an
- * external system, such as creating instance of {@link Source} and {@link Sink}, generating test
- * data, and creating data readers or writers for validating the correctness of test data.
- */
-public interface ExternalContext extends AutoCloseable {
+public interface TableSinkExternalContext extends ExternalContext {
+    /** Get table options for building DDL of the connector sink table. */
+    Map<String, String> getTableOptions(TestingSinkOptions sinkOptions)
+            throws UnsupportedOperationException;
 
-    /** Get URL of connector JARs that will be attached to job graphs when submitting Flink jobs. */
-    List<URL> getConnectorJarPaths();
+    /**
+     * Create a new split in the external system and return a data writer corresponding to the new
+     * split.
+     */
+    SinkDataReader<RowData> createSinkRowDataReader(
+            TestingSinkOptions sinkOptions, DataType dataType);
 }
