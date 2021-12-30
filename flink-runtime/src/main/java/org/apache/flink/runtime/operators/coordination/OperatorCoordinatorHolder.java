@@ -19,12 +19,15 @@
 package org.apache.flink.runtime.operators.coordination;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.metrics.groups.OperatorCoordinatorMetricGroup;
 import org.apache.flink.runtime.checkpoint.OperatorCoordinatorCheckpointContext;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.jobgraph.OperatorID;
+import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.operators.coordination.util.IncompleteFuturesTracker;
 import org.apache.flink.runtime.scheduler.GlobalFailureHandler;
+import org.apache.flink.runtime.source.coordinator.SourceCoordinator;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.SerializedValue;
@@ -133,6 +136,7 @@ public class OperatorCoordinatorHolder
 
     private GlobalFailureHandler globalFailureHandler;
     private ComponentMainThreadExecutor mainThreadExecutor;
+    private OperatorCoordinatorMetricGroup operatorCoordinatorMetricGroup;
 
     private OperatorCoordinatorHolder(
             final OperatorID operatorId,
@@ -155,12 +159,20 @@ public class OperatorCoordinatorHolder
 
     public void lazyInitialize(
             GlobalFailureHandler globalFailureHandler,
-            ComponentMainThreadExecutor mainThreadExecutor) {
+            ComponentMainThreadExecutor mainThreadExecutor,
+            JobManagerJobMetricGroup jobManagerJobMetricGroup) {
 
         this.globalFailureHandler = globalFailureHandler;
         this.mainThreadExecutor = mainThreadExecutor;
+        this.operatorCoordinatorMetricGroup =
+                coordinator instanceof SourceCoordinator
+                        ? jobManagerJobMetricGroup.getOrAddOperatorCoordinator(
+                                operatorId, context.operatorName)
+                        : jobManagerJobMetricGroup.getOrAddSourceCoordinator(
+                                operatorId, context.operatorName);
 
-        context.lazyInitialize(globalFailureHandler, mainThreadExecutor);
+        context.lazyInitialize(
+                globalFailureHandler, mainThreadExecutor, operatorCoordinatorMetricGroup);
 
         setupAllSubtaskGateways();
     }
@@ -565,6 +577,7 @@ public class OperatorCoordinatorHolder
 
         private GlobalFailureHandler globalFailureHandler;
         private Executor schedulerExecutor;
+        private OperatorCoordinatorMetricGroup metricGroup;
 
         private volatile boolean failed;
 
@@ -583,9 +596,13 @@ public class OperatorCoordinatorHolder
             this.supportsConcurrentExecutionAttempts = supportsConcurrentExecutionAttempts;
         }
 
-        void lazyInitialize(GlobalFailureHandler globalFailureHandler, Executor schedulerExecutor) {
+        void lazyInitialize(
+                GlobalFailureHandler globalFailureHandler,
+                Executor schedulerExecutor,
+                OperatorCoordinatorMetricGroup metricGroup) {
             this.globalFailureHandler = checkNotNull(globalFailureHandler);
             this.schedulerExecutor = checkNotNull(schedulerExecutor);
+            this.metricGroup = metricGroup;
         }
 
         void unInitialize() {
@@ -608,6 +625,11 @@ public class OperatorCoordinatorHolder
         @Override
         public OperatorID getOperatorId() {
             return operatorId;
+        }
+
+        @Override
+        public OperatorCoordinatorMetricGroup metricGroup() {
+            return metricGroup;
         }
 
         @Override

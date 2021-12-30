@@ -28,6 +28,7 @@ import org.apache.flink.connector.kafka.source.KafkaSourceOptions;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.connector.kafka.source.enumerator.subscriber.KafkaSubscriber;
 import org.apache.flink.connector.kafka.source.split.KafkaPartitionSplit;
+import org.apache.flink.metrics.Gauge;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.apache.kafka.clients.admin.AdminClient;
@@ -129,6 +130,7 @@ public class KafkaSourceEnumerator
                         KafkaSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS,
                         Long::parseLong);
         this.consumerGroupId = properties.getProperty(ConsumerConfig.GROUP_ID_CONFIG);
+        context.metricGroup().gauge("assignedPartitionsNum", assignedPartitions::size);
     }
 
     /**

@@ -18,6 +18,7 @@
 package org.apache.flink.metrics.groups;
 
 import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.MetricGroup;
 
 /**
@@ -26,4 +27,14 @@ import org.apache.flink.metrics.MetricGroup;
  * <p>You should only update the metrics in the coordinator thread.
  */
 @PublicEvolving
-public interface OperatorCoordinatorMetricGroup extends MetricGroup {}
+public interface OperatorCoordinatorMetricGroup extends MetricGroup {
+	/**
+	 * The total number of events received since the operator coordinator started.
+	 */
+	Counter getNumEventsInCounter();
+
+	/**
+	 * The total number of events sent by the operator coordinator.
+	 */
+	Counter getNumEventsOutCounter();
+}

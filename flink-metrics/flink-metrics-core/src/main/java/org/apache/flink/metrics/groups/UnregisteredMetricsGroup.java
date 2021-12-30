@@ -185,6 +185,16 @@ public class UnregisteredMetricsGroup implements MetricGroup {
         public <G extends Gauge<Long>> G setUnassignedSplitsGauge(G unassignedSplitsGauge) {
             return null;
         }
+
+        @Override
+        public Counter getNumEventsInCounter() {
+            return null;
+        }
+
+        @Override
+        public Counter getNumEventsOutCounter() {
+            return null;
+        }
     }
 
     private static class UnregisteredCacheMetricGroup extends UnregisteredMetricsGroup

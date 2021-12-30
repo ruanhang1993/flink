@@ -30,6 +30,7 @@ import org.apache.flink.api.connector.source.SupportsHandleExecutionAttemptSourc
 import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.operators.coordination.CoordinatorStore;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
@@ -117,6 +118,8 @@ public class SourceCoordinator<SplitT extends SourceSplit, EnumChkT>
      */
     @Nullable private final String coordinatorListeningID;
 
+    private final Counter numEventsInCounter;
+
     public SourceCoordinator(
             String operatorName,
             Source<?, SplitT, EnumChkT> source,
@@ -145,6 +148,7 @@ public class SourceCoordinator<SplitT extends SourceSplit, EnumChkT>
         this.coordinatorStore = coordinatorStore;
         this.watermarkAlignmentParams = watermarkAlignmentParams;
         this.coordinatorListeningID = coordinatorListeningID;
+        this.numEventsInCounter = context.metricGroup().getNumEventsInCounter();
 
         if (watermarkAlignmentParams.isEnabled()) {
             if (context.isConcurrentExecutionAttemptsSupported()) {
@@ -269,6 +273,7 @@ public class SourceCoordinator<SplitT extends SourceSplit, EnumChkT>
 
     @Override
     public void handleEventFromOperator(int subtask, int attemptNumber, OperatorEvent event) {
+        numEventsInCounter.inc();
         runInEventLoop(
                 () -> {
                     if (event instanceof RequestSplitEvent) {

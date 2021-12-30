@@ -24,6 +24,7 @@ import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAda
 import org.apache.flink.runtime.concurrent.ManuallyTriggeredScheduledExecutorService;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.operators.coordination.EventReceivingTasks.EventWithSubtask;
 import org.apache.flink.runtime.scheduler.GlobalFailureHandler;
 import org.apache.flink.util.ExceptionUtils;
@@ -536,7 +537,10 @@ public class OperatorCoordinatorHolderTest extends TestLogger {
                         eventTarget,
                         false);
 
-        holder.lazyInitialize(globalFailureHandler, mainThreadExecutor);
+        holder.lazyInitialize(
+                globalFailureHandler,
+                mainThreadExecutor,
+                UnregisteredMetricGroups.createUnregisteredJobManagerJobMetricGroup());
         holder.start();
 
         return holder;

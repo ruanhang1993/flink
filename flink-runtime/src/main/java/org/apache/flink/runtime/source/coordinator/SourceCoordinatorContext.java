@@ -165,7 +165,7 @@ public class SourceCoordinatorContext<SplitT extends SourceSplit>
 
     @Override
     public SplitEnumeratorMetricGroup metricGroup() {
-        return null;
+        return (SplitEnumeratorMetricGroup) operatorCoordinatorContext.metricGroup();
     }
 
     @Override
