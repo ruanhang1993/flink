@@ -19,8 +19,8 @@
 package org.apache.flink.connectors.test.common.external.source;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Source;
+import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.connectors.test.common.external.ExternalContext;
 
 import java.util.List;
@@ -31,42 +31,41 @@ import java.util.List;
  * @param <T> Type of elements after deserialization by source
  */
 @Experimental
-public interface DataStreamSourceExternalContext<T> extends ExternalContext {
+public interface DataStreamSourceExternalContext<T>
+        extends ExternalContext, ResultTypeQueryable<T> {
 
     /**
      * Create an instance of {@link Source} satisfying given options.
      *
-     * @param sourceOptions options of the source
+     * @param sourceSettings settings of the source
      * @throws UnsupportedOperationException if the provided option is not supported.
      */
-    Source<T, ?, ?> createSource(TestingSourceOptions sourceOptions)
+    Source<T, ?, ?> createSource(TestingSourceSettings sourceSettings)
             throws UnsupportedOperationException;
 
     /**
      * Create a new split in the external system and return a data writer corresponding to the new
      * split.
      *
-     * @param sourceOptions options of the source
+     * @param sourceSettings options of the source
      */
-    SourceSplitDataWriter<T> createSourceSplitDataWriter(TestingSourceOptions sourceOptions);
+    ExternalSystemSplitDataWriter<T> createSourceSplitDataWriter(
+            TestingSourceSettings sourceSettings);
 
     /**
      * Generate test data.
      *
-     * <p>These test data will be written to external system using {@link SourceSplitDataWriter},
-     * consume back by source in testing Flink job, and make comparison with {@link
-     * T#equals(Object)} for validating correctness.
+     * <p>These test data will be written to external system using {@link
+     * ExternalSystemSplitDataWriter}, consume back by source in testing Flink job, and make
+     * comparison with {@link T#equals(Object)} for validating correctness.
      *
      * <p>Note: Make sure that the {@link T#equals(Object)} returns false when the records in
      * different splits.
      *
-     * @param sourceOptions options of the source
+     * @param sourceSettings options of the source
      * @param splitIndex index of the split.
      * @param seed Seed for generating random test data set.
      * @return List of generated test data.
      */
-    List<T> generateTestData(TestingSourceOptions sourceOptions, int splitIndex, long seed);
-
-    /** Get type information of the generated test data. */
-    TypeInformation<T> getTestDataTypeInformation();
+    List<T> generateTestData(TestingSourceSettings sourceSettings, int splitIndex, long seed);
 }

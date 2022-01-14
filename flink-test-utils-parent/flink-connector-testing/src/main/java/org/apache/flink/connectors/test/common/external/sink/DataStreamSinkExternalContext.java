@@ -18,8 +18,8 @@
 
 package org.apache.flink.connectors.test.common.external.sink;
 
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.sink.Sink;
+import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.connectors.test.common.external.ExternalContext;
 
 import java.util.List;
@@ -29,36 +29,33 @@ import java.util.List;
  *
  * @param <T> Type of elements before serialization by sink
  */
-public interface DataStreamSinkExternalContext<T> extends ExternalContext {
+public interface DataStreamSinkExternalContext<T> extends ExternalContext, ResultTypeQueryable<T> {
 
     /**
      * Create an instance of {@link Sink} satisfying given options.
      *
-     * @param sinkOptions options of the sink
+     * @param sinkSettings settings of the sink
      * @throws UnsupportedOperationException if the provided option is not supported.
      */
-    Sink<T, ?, ?, ?> createSink(TestingSinkOptions sinkOptions)
+    Sink<T, ?, ?, ?> createSink(TestingSinkSettings sinkSettings)
             throws UnsupportedOperationException;
 
     /** Create a reader for consuming data written to the external system by sink. */
-    SinkDataReader<T> createSinkDataReader(TestingSinkOptions sinkOptions);
+    ExternalSystemDataReader<T> createSinkDataReader(TestingSinkSettings sinkSettings);
 
     /**
      * Generate test data.
      *
      * <p>These test data will be sent to sink via a special source in Flink job, write to external
-     * system by sink, consume back via {@link SinkDataReader}, and make comparison with {@link
-     * T#equals(Object)} for validating correctness.
+     * system by sink, consume back via {@link ExternalSystemDataReader}, and make comparison with
+     * {@link T#equals(Object)} for validating correctness.
      *
      * <p>Make sure that the {@link T#equals(Object)} returns false when the records in different
      * splits.
      *
-     * @param sinkOptions options of the sink
+     * @param sinkSettings settings of the sink
      * @param seed Seed for generating random test data set.
      * @return List of generated test data.
      */
-    List<T> generateTestData(TestingSinkOptions sinkOptions, long seed);
-
-    /** Get type information of the generated test data. */
-    TypeInformation<T> getTestDataTypeInformation();
+    List<T> generateTestData(TestingSinkSettings sinkSettings, long seed);
 }

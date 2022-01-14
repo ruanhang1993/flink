@@ -41,7 +41,7 @@ public interface TestEnvironment extends TestResource {
      *
      * @param envOptions options for the environment to satisfy
      */
-    StreamExecutionEnvironment createExecutionEnvironment(ExecutionEnvironmentOptions envOptions);
+    StreamExecutionEnvironment createExecutionEnvironment(TestEnvironmentSettings envOptions);
 
     /** Get endpoint of the test environment for connecting via REST API. */
     Endpoint getRestEndpoint();

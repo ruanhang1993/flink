@@ -32,13 +32,13 @@ import java.util.Map;
  */
 public interface TableSourceExternalContext extends ExternalContext {
     /** Get table options for building DDL of the connector source table. */
-    Map<String, String> getSourceTableOptions(TestingSourceOptions sourceOptions)
+    Map<String, String> getSourceTableOptions(TestingSourceSettings sourceSettings)
             throws UnsupportedOperationException;
 
     /**
      * Create a new split in the external system and return a data writer for writing {@link
      * RowData} corresponding to the new split.
      */
-    SourceSplitDataWriter<RowData> createSplitRowDataWriter(
-            TestingSourceOptions sourceOptions, DataType dataType);
+    ExternalSystemSplitDataWriter<RowData> createSplitRowDataWriter(
+            TestingSourceSettings sourceOptions, DataType dataType);
 }

@@ -18,7 +18,7 @@
 
 package org.apache.flink.connector.kafka.testutils;
 
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Properties;
 
 /** Source split data writer for writing test data into Kafka topic partitions. */
-public class KafkaPartitionDataWriter implements SourceSplitDataWriter<String> {
+public class KafkaPartitionDataWriter implements ExternalSystemSplitDataWriter<String> {
 
     private final KafkaProducer<byte[], byte[]> kafkaProducer;
     private final TopicPartition topicPartition;

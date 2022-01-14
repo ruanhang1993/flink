@@ -21,8 +21,8 @@ package org.apache.flink.tests.util.flink;
 import org.apache.flink.api.common.time.Deadline;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connectors.test.common.environment.ClusterControllable;
-import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
+import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -94,9 +94,9 @@ public class FlinkContainerTestEnvironment implements TestEnvironment, ClusterCo
 
     @Override
     public StreamExecutionEnvironment createExecutionEnvironment(
-            ExecutionEnvironmentOptions envOptions) {
+            TestEnvironmentSettings envOptions) {
         jarPaths.addAll(
-                envOptions.connectorJarPaths().stream()
+                envOptions.getConnectorJarPaths().stream()
                         .map(URL::getPath)
                         .collect(Collectors.toList()));
         return StreamExecutionEnvironment.createRemoteEnvironment(

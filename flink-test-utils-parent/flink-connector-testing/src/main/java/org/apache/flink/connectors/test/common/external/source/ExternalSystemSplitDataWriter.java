@@ -16,24 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external.sink;
+package org.apache.flink.connectors.test.common.external.source;
 
-import java.time.Duration;
+import org.apache.flink.annotation.Experimental;
+
 import java.util.List;
 
 /**
- * A data reader for consuming records from an external system.
+ * A data writer for writing records into a {@link
+ * org.apache.flink.api.connector.source.SourceSplit} in the external system.
  *
- * @param <T> Type of the consuming record
+ * @param <T> Type of writing records
  */
-public interface SinkDataReader<T> extends AutoCloseable {
+@Experimental
+public interface ExternalSystemSplitDataWriter<T> extends AutoCloseable {
 
-    /**
-     * Poll a batch of records from external system.
-     *
-     * <p>Test cases will keep invoking this method until expected records have been polled.
-     *
-     * @param timeout The maximum time to block
-     */
-    List<T> poll(Duration timeout);
+    /** Write records to the split in external system. */
+    void writeRecords(List<T> records);
 }

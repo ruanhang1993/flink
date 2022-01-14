@@ -24,15 +24,21 @@ import org.apache.flink.table.types.DataType;
 
 import java.util.Map;
 
+/**
+ * External context for table sinks.
+ *
+ * <p>Comparing with {@link DataStreamSinkExternalContext}, the data type of this external context
+ * is fixed as {@link RowData} to test functionality of table source.
+ */
 public interface TableSinkExternalContext extends ExternalContext {
     /** Get table options for building DDL of the connector sink table. */
-    Map<String, String> getTableOptions(TestingSinkOptions sinkOptions)
+    Map<String, String> getTableOptions(TestingSinkSettings sinkSettings)
             throws UnsupportedOperationException;
 
     /**
      * Create a new split in the external system and return a data writer corresponding to the new
      * split.
      */
-    SinkDataReader<RowData> createSinkRowDataReader(
-            TestingSinkOptions sinkOptions, DataType dataType);
+    ExternalSystemDataReader<RowData> createSinkRowDataReader(
+            TestingSinkSettings sinkOptions, DataType dataType);
 }

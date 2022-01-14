@@ -31,7 +31,10 @@ import org.apache.flink.test.util.MiniClusterWithClientResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -42,13 +45,11 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
 
     private static final Logger LOG = LoggerFactory.getLogger(MiniClusterTestEnvironment.class);
 
-    // MiniCluster
     private final MiniClusterWithClientResource miniCluster;
+    private final Path checkpointPath;
 
     // The index of current running TaskManager
     private int latestTMIndex = 0;
-
-    // Whether MiniCluster is running
     private boolean isStarted = false;
 
     public MiniClusterTestEnvironment() {
@@ -60,11 +61,16 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
                                 .setRpcServiceSharing(RpcServiceSharing.DEDICATED)
                                 .withHaLeadershipControl()
                                 .build());
+        try {
+            this.checkpointPath = Files.createTempDirectory("minicluster-environment-checkpoint-");
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to create temporary checkpoint directory", e);
+        }
     }
 
     @Override
     public StreamExecutionEnvironment createExecutionEnvironment(
-            ExecutionEnvironmentOptions envOptions) {
+            TestEnvironmentSettings envOptions) {
         return StreamExecutionEnvironment.getExecutionEnvironment();
     }
 
@@ -80,7 +86,7 @@ public class MiniClusterTestEnvironment implements TestEnvironment, ClusterContr
 
     @Override
     public String getCheckpointUri() {
-        return null;
+        return checkpointPath.toUri().toString();
     }
 
     @Override

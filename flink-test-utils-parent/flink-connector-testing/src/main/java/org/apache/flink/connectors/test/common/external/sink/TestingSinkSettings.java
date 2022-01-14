@@ -16,28 +16,44 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external.source;
+package org.apache.flink.connectors.test.common.external.sink;
 
-import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 
-/** Options for configuring the source under testing. */
-public class TestingSourceOptions {
-    private final Boundedness boundedness;
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
+/** Options for configuring the sink under testing. */
+public class TestingSinkSettings {
     private final DeliveryGuarantee deliveryGuarantee;
 
-    public TestingSourceOptions(Boundedness boundedness, DeliveryGuarantee deliveryGuarantee) {
-        this.boundedness = boundedness;
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    private TestingSinkSettings(DeliveryGuarantee deliveryGuarantee) {
         this.deliveryGuarantee = deliveryGuarantee;
     }
 
-    /** The boundedness of the source. */
-    public Boundedness boundedness() {
-        return boundedness;
+    /** The delivery guarantee of the source. */
+    public DeliveryGuarantee getDeliveryGuarantee() {
+        return deliveryGuarantee;
     }
 
-    /** The delivery guarantee of the source. */
-    public DeliveryGuarantee deliveryGuarantee() {
-        return deliveryGuarantee;
+    public static class Builder {
+        private DeliveryGuarantee deliveryGuarantee;
+
+        public Builder setDeliveryGuarantee(DeliveryGuarantee deliveryGuarantee) {
+            this.deliveryGuarantee = deliveryGuarantee;
+            return this;
+        }
+
+        public TestingSinkSettings build() {
+            sanityCheck();
+            return new TestingSinkSettings(deliveryGuarantee);
+        }
+
+        private void sanityCheck() {
+            checkNotNull(deliveryGuarantee, "Delivery guarantee is not specified");
+        }
     }
 }

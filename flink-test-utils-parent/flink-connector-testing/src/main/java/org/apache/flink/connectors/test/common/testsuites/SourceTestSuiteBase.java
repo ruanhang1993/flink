@@ -27,11 +27,11 @@ import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connectors.test.common.environment.ClusterControllable;
-import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
+import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
-import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 import org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension;
 import org.apache.flink.connectors.test.common.junit.extensions.TestCaseInvocationContextProvider;
 import org.apache.flink.connectors.test.common.junit.extensions.TestLoggerExtension;
@@ -108,17 +108,22 @@ public abstract class SourceTestSuiteBase<T> {
             TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext)
             throws Exception {
         // Step 1: Preparation
-        TestingSourceOptions sourceOptions =
-                new TestingSourceOptions(Boundedness.BOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
-        ExecutionEnvironmentOptions envOptions =
-                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
-        Source<T, ?, ?> source = tryCreateSource(externalContext, sourceOptions);
+        TestingSourceSettings sourceSettings =
+                TestingSourceSettings.builder()
+                        .setBoundedness(Boundedness.BOUNDED)
+                        .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
+                        .build();
+        TestEnvironmentSettings envSettings =
+                TestEnvironmentSettings.builder()
+                        .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                        .build();
+        Source<T, ?, ?> source = tryCreateSource(externalContext, sourceSettings);
 
         // Step 2: Write test data to external system
-        List<T> testRecords = generateAndWriteTestData(0, externalContext, sourceOptions);
+        List<T> testRecords = generateAndWriteTestData(0, externalContext, sourceSettings);
 
         // Step 3: Build and execute Flink job
-        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
+        StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envSettings);
         DataStreamSource<T> stream =
                 execEnv.fromSource(source, WatermarkStrategy.noWatermarks(), "Tested Source")
                         .setParallelism(1);
@@ -150,17 +155,22 @@ public abstract class SourceTestSuiteBase<T> {
             TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext)
             throws Exception {
         // Step 1: Preparation
-        TestingSourceOptions sourceOptions =
-                new TestingSourceOptions(Boundedness.BOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
-        ExecutionEnvironmentOptions envOptions =
-                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
-        Source<T, ?, ?> source = tryCreateSource(externalContext, sourceOptions);
+        TestingSourceSettings sourceSettings =
+                TestingSourceSettings.builder()
+                        .setBoundedness(Boundedness.BOUNDED)
+                        .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
+                        .build();
+        TestEnvironmentSettings envOptions =
+                TestEnvironmentSettings.builder()
+                        .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                        .build();
+        Source<T, ?, ?> source = tryCreateSource(externalContext, sourceSettings);
 
         // Step 2: Write test data to external system
         int splitNumber = 4;
         List<List<T>> testRecordsLists = new ArrayList<>();
         for (int i = 0; i < splitNumber; i++) {
-            testRecordsLists.add(generateAndWriteTestData(i, externalContext, sourceOptions));
+            testRecordsLists.add(generateAndWriteTestData(i, externalContext, sourceSettings));
         }
 
         // Step 3: Build and execute Flink job
@@ -199,18 +209,22 @@ public abstract class SourceTestSuiteBase<T> {
             TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext)
             throws Exception {
         // Step 1: Preparation
-        TestingSourceOptions testingSourceOptions =
-                new TestingSourceOptions(Boundedness.BOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
-        ExecutionEnvironmentOptions envOptions =
-                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
-        Source<T, ?, ?> source = tryCreateSource(externalContext, testingSourceOptions);
+        TestingSourceSettings sourceSettings =
+                TestingSourceSettings.builder()
+                        .setBoundedness(Boundedness.BOUNDED)
+                        .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
+                        .build();
+        TestEnvironmentSettings envOptions =
+                TestEnvironmentSettings.builder()
+                        .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                        .build();
+        Source<T, ?, ?> source = tryCreateSource(externalContext, sourceSettings);
 
         // Step 2: Write test data to external system
         int splitNumber = 4;
         List<List<T>> testRecordsLists = new ArrayList<>();
         for (int i = 0; i < splitNumber; i++) {
-            testRecordsLists.add(
-                    generateAndWriteTestData(i, externalContext, testingSourceOptions));
+            testRecordsLists.add(generateAndWriteTestData(i, externalContext, sourceSettings));
         }
 
         // Step 3: Build and execute Flink job
@@ -249,25 +263,29 @@ public abstract class SourceTestSuiteBase<T> {
             ClusterControllable controller)
             throws Exception {
         // Step 1: Preparation
-        TestingSourceOptions testingSourceOptions =
-                new TestingSourceOptions(
-                        Boundedness.CONTINUOUS_UNBOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
-        ExecutionEnvironmentOptions envOptions =
-                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
-        Source<T, ?, ?> source = tryCreateSource(externalContext, testingSourceOptions);
+        TestingSourceSettings sourceSettings =
+                TestingSourceSettings.builder()
+                        .setBoundedness(Boundedness.CONTINUOUS_UNBOUNDED)
+                        .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
+                        .build();
+        TestEnvironmentSettings envOptions =
+                TestEnvironmentSettings.builder()
+                        .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                        .build();
+        Source<T, ?, ?> source = tryCreateSource(externalContext, sourceSettings);
 
         // Step 2: Write test data to external system
         int splitIndex = 0;
         List<T> testRecordsBeforeFailure =
                 externalContext.generateTestData(
-                        testingSourceOptions, splitIndex, ThreadLocalRandom.current().nextLong());
-        SourceSplitDataWriter<T> sourceSplitDataWriter =
-                externalContext.createSourceSplitDataWriter(testingSourceOptions);
+                        sourceSettings, splitIndex, ThreadLocalRandom.current().nextLong());
+        ExternalSystemSplitDataWriter<T> externalSystemSplitDataWriter =
+                externalContext.createSourceSplitDataWriter(sourceSettings);
         LOG.info(
                 "Writing {} records for split {} to external system",
                 testRecordsBeforeFailure.size(),
                 splitIndex);
-        sourceSplitDataWriter.writeRecords(testRecordsBeforeFailure);
+        externalSystemSplitDataWriter.writeRecords(testRecordsBeforeFailure);
 
         // Step 3: Build and execute Flink job
         StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
@@ -298,12 +316,12 @@ public abstract class SourceTestSuiteBase<T> {
         // Step 6: Write test data again to external system
         List<T> testRecordsAfterFailure =
                 externalContext.generateTestData(
-                        testingSourceOptions, splitIndex, ThreadLocalRandom.current().nextLong());
+                        sourceSettings, splitIndex, ThreadLocalRandom.current().nextLong());
         LOG.info(
                 "Writing {} records for split {} to external system",
                 testRecordsAfterFailure.size(),
                 splitIndex);
-        sourceSplitDataWriter.writeRecords(testRecordsAfterFailure);
+        externalSystemSplitDataWriter.writeRecords(testRecordsAfterFailure);
 
         // Step 7: Validate test result
         LOG.info("Checking records after job failover");
@@ -331,21 +349,23 @@ public abstract class SourceTestSuiteBase<T> {
     protected List<T> generateAndWriteTestData(
             int splitIndex,
             DataStreamSourceExternalContext<T> externalContext,
-            TestingSourceOptions testingSourceOptions) {
+            TestingSourceSettings testingSourceSettings) {
         List<T> testRecords =
                 externalContext.generateTestData(
-                        testingSourceOptions, splitIndex, ThreadLocalRandom.current().nextLong());
+                        testingSourceSettings, splitIndex, ThreadLocalRandom.current().nextLong());
         LOG.info(
                 "Writing {} records for split {} to external system",
                 testRecords.size(),
                 splitIndex);
-        externalContext.createSourceSplitDataWriter(testingSourceOptions).writeRecords(testRecords);
+        externalContext
+                .createSourceSplitDataWriter(testingSourceSettings)
+                .writeRecords(testRecords);
         return testRecords;
     }
 
     protected Source<T, ?, ?> tryCreateSource(
             DataStreamSourceExternalContext<T> externalContext,
-            TestingSourceOptions sourceOptions) {
+            TestingSourceSettings sourceOptions) {
         try {
             return externalContext.createSource(sourceOptions);
         } catch (UnsupportedOperationException e) {

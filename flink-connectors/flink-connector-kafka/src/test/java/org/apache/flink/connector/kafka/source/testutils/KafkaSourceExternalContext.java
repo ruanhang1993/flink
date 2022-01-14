@@ -25,9 +25,10 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.KafkaSourceBuilder;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
+import org.apache.flink.connector.kafka.testutils.KafkaPartitionDataWriter;
 import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
-import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
@@ -54,11 +55,12 @@ import java.util.regex.Pattern;
 
 import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
 
+/** External context for testing {@link KafkaSource}. */
 public class KafkaSourceExternalContext implements DataStreamSourceExternalContext<String> {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaSourceExternalContext.class);
-    private static final Pattern TOPIC_NAME_PATTERN = Pattern.compile("kafka-test-topic-.*");
     private static final String TOPIC_NAME_PREFIX = "kafka-test-topic-";
+    private static final Pattern TOPIC_NAME_PATTERN = Pattern.compile(TOPIC_NAME_PREFIX + ".*");
     private static final String GROUP_ID_PREFIX = "kafka-source-external-context-";
     private static final int NUM_RECORDS_UPPER_BOUND = 500;
     private static final int NUM_RECORDS_LOWER_BOUND = 100;
@@ -87,7 +89,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
     }
 
     @Override
-    public Source<String, ?, ?> createSource(TestingSourceOptions sourceOptions) {
+    public Source<String, ?, ?> createSource(TestingSourceSettings sourceSettings) {
         final KafkaSourceBuilder<String> builder = KafkaSource.builder();
 
         builder.setBootstrapServers(bootstrapServers)
@@ -96,7 +98,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
                 .setDeserializer(
                         KafkaRecordDeserializationSchema.valueOnly(StringDeserializer.class));
 
-        if (sourceOptions.boundedness().equals(Boundedness.BOUNDED)) {
+        if (sourceSettings.getBoundedness().equals(Boundedness.BOUNDED)) {
             builder.setBounded(OffsetsInitializer.latest());
         }
 
@@ -104,8 +106,8 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
     }
 
     @Override
-    public SourceSplitDataWriter<String> createSourceSplitDataWriter(
-            TestingSourceOptions sourceOptions) {
+    public ExternalSystemSplitDataWriter<String> createSourceSplitDataWriter(
+            TestingSourceSettings sourceSettings) {
         KafkaPartitionDataWriter writer;
         try {
             switch (splitMappingMode) {
@@ -128,7 +130,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
 
     @Override
     public List<String> generateTestData(
-            TestingSourceOptions sourceOptions, int splitIndex, long seed) {
+            TestingSourceSettings sourceSettings, int splitIndex, long seed) {
         Random random = new Random(seed);
         int recordNum =
                 random.nextInt(NUM_RECORDS_UPPER_BOUND - NUM_RECORDS_LOWER_BOUND)
@@ -144,7 +146,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
     }
 
     @Override
-    public TypeInformation<String> getTestDataTypeInformation() {
+    public TypeInformation<String> getProducedType() {
         return TypeInformation.of(String.class);
     }
 

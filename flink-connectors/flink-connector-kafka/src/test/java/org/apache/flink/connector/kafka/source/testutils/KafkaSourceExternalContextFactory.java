@@ -26,6 +26,7 @@ import java.net.URL;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/** Factory of {@link KafkaSourceExternalContext}. */
 public class KafkaSourceExternalContextFactory
         implements ExternalContextFactory<KafkaSourceExternalContext> {
 

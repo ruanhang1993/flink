@@ -22,11 +22,11 @@ import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
+import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
-import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 import org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension;
 import org.apache.flink.connectors.test.common.junit.extensions.TestCaseInvocationContextProvider;
 import org.apache.flink.connectors.test.common.junit.extensions.TestLoggerExtension;
@@ -57,18 +57,23 @@ public abstract class UnorderedSourceTestSuiteBase<T> {
     public void testOneSplitWithMultipleConsumers(
             TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext)
             throws Exception {
-        TestingSourceOptions sourceOptions =
-                new TestingSourceOptions(Boundedness.BOUNDED, DeliveryGuarantee.EXACTLY_ONCE);
-        ExecutionEnvironmentOptions envOptions =
-                new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths(), null);
+        TestingSourceSettings sourceSettings =
+                TestingSourceSettings.builder()
+                        .setBoundedness(Boundedness.BOUNDED)
+                        .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
+                        .build();
+        TestEnvironmentSettings envOptions =
+                TestEnvironmentSettings.builder()
+                        .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                        .build();
         List<T> testData =
                 externalContext.generateTestData(
-                        sourceOptions, 0, ThreadLocalRandom.current().nextLong());
-        SourceSplitDataWriter<T> writer =
-                externalContext.createSourceSplitDataWriter(sourceOptions);
+                        sourceSettings, 0, ThreadLocalRandom.current().nextLong());
+        ExternalSystemSplitDataWriter<T> writer =
+                externalContext.createSourceSplitDataWriter(sourceSettings);
         writer.writeRecords(testData);
 
-        Source<T, ?, ?> source = externalContext.createSource(sourceOptions);
+        Source<T, ?, ?> source = externalContext.createSource(sourceSettings);
         StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
         List<T> results =
                 execEnv.fromSource(source, WatermarkStrategy.noWatermarks(), "Pulsar source")

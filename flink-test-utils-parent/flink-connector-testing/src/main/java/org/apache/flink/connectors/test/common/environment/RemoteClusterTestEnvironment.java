@@ -69,9 +69,9 @@ public class RemoteClusterTestEnvironment implements TestEnvironment {
 
     @Override
     public StreamExecutionEnvironment createExecutionEnvironment(
-            ExecutionEnvironmentOptions envOptions) {
+            TestEnvironmentSettings envOptions) {
         jarPaths.addAll(
-                envOptions.connectorJarPaths().stream()
+                envOptions.getConnectorJarPaths().stream()
                         .map(URL::getPath)
                         .collect(Collectors.toList()));
         return StreamExecutionEnvironment.createRemoteEnvironment(

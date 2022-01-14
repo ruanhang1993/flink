@@ -27,8 +27,8 @@ import org.apache.flink.connectors.test.common.environment.MiniClusterTestEnviro
 import org.apache.flink.connectors.test.common.external.ExternalContext;
 import org.apache.flink.connectors.test.common.external.ExternalContextFactory;
 import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
-import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
@@ -117,8 +117,8 @@ public class AvroBulkFormatITCase extends SourceTestSuiteBase<RowData> {
         }
 
         @Override
-        public Source<RowData, ?, ?> createSource(TestingSourceOptions sourceOptions) {
-            if (sourceOptions.boundedness() == Boundedness.CONTINUOUS_UNBOUNDED) {
+        public Source<RowData, ?, ?> createSource(TestingSourceSettings sourceSettings) {
+            if (sourceSettings.getBoundedness() == Boundedness.CONTINUOUS_UNBOUNDED) {
                 throw new UnsupportedOperationException(
                         "Currently Avro format only supports running in bounded mode");
             }
@@ -130,13 +130,14 @@ public class AvroBulkFormatITCase extends SourceTestSuiteBase<RowData> {
         }
 
         @Override
-        public SourceSplitDataWriter<RowData> createSourceSplitDataWriter(
-                TestingSourceOptions sourceOptions) {
+        public ExternalSystemSplitDataWriter<RowData> createSourceSplitDataWriter(
+                TestingSourceSettings sourceSettings) {
             File file = Paths.get(tmpDir.toString(), String.valueOf(index)).toFile();
-            AvroBulkFormatSourceSplitDataWriter writer;
+            AvroBulkFormatExternalSystemSplitDataWriter writer;
             try {
                 file.createNewFile();
-                writer = new AvroBulkFormatSourceSplitDataWriter(new FileOutputStream(file));
+                writer =
+                        new AvroBulkFormatExternalSystemSplitDataWriter(new FileOutputStream(file));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -146,7 +147,7 @@ public class AvroBulkFormatITCase extends SourceTestSuiteBase<RowData> {
 
         @Override
         public List<RowData> generateTestData(
-                TestingSourceOptions sourceOptions, int splitIndex, long seed) {
+                TestingSourceSettings sourceSettings, int splitIndex, long seed) {
             Random random = new Random(seed);
             List<RowData> data = new ArrayList<>();
             for (int i = 0; i < blocksPerFile; i++) {
@@ -158,7 +159,7 @@ public class AvroBulkFormatITCase extends SourceTestSuiteBase<RowData> {
         }
 
         @Override
-        public TypeInformation<RowData> getTestDataTypeInformation() {
+        public TypeInformation<RowData> getProducedType() {
             return TypeInformation.of(RowData.class);
         }
 
@@ -206,14 +207,15 @@ public class AvroBulkFormatITCase extends SourceTestSuiteBase<RowData> {
         }
     }
 
-    private static class AvroBulkFormatSourceSplitDataWriter
-            implements SourceSplitDataWriter<RowData> {
+    private static class AvroBulkFormatExternalSystemSplitDataWriter
+            implements ExternalSystemSplitDataWriter<RowData> {
 
         private final Schema schema;
         private final RowDataToAvroConverters.RowDataToAvroConverter converter;
         private final DataFileWriter<GenericRecord> dataFileWriter;
 
-        private AvroBulkFormatSourceSplitDataWriter(FileOutputStream out) throws IOException {
+        private AvroBulkFormatExternalSystemSplitDataWriter(FileOutputStream out)
+                throws IOException {
             schema = AvroSchemaConverter.convertToSchema(ROW_TYPE);
             converter = RowDataToAvroConverters.createConverter(ROW_TYPE);
 

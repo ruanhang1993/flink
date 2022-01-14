@@ -23,29 +23,59 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import javax.annotation.Nullable;
 
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
  * Options for configuring {@link StreamExecutionEnvironment} created by {@link TestEnvironment}.
  */
-public class ExecutionEnvironmentOptions {
+public class TestEnvironmentSettings {
     private final List<URL> connectorJarPaths;
     @Nullable private final String savepointRestorePath;
 
-    public ExecutionEnvironmentOptions(
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    private TestEnvironmentSettings(
             List<URL> connectorJarPaths, @Nullable String savepointRestorePath) {
         this.connectorJarPaths = connectorJarPaths;
         this.savepointRestorePath = savepointRestorePath;
     }
 
     /** List of connector JARs paths. */
-    public List<URL> connectorJarPaths() {
+    public List<URL> getConnectorJarPaths() {
         return connectorJarPaths;
     }
 
     /** Path of savepoint that the job should recover from. */
     @Nullable
-    public String savepointRestorePath() {
+    public String getSavepointRestorePath() {
         return savepointRestorePath;
+    }
+
+    public static class Builder {
+        private final List<URL> connectorJarPaths = new ArrayList<>();
+        private String savepointRestorePath;
+
+        public Builder setConnectorJarPaths(List<URL> connectorJarPaths) {
+            this.connectorJarPaths.addAll(connectorJarPaths);
+            return this;
+        }
+
+        public Builder setConnectorJarPaths(URL... connectorJarPaths) {
+            this.connectorJarPaths.addAll(Arrays.asList(connectorJarPaths));
+            return this;
+        }
+
+        public Builder setSavepointRestorePath(String savepointRestorePath) {
+            this.savepointRestorePath = savepointRestorePath;
+            return this;
+        }
+
+        public TestEnvironmentSettings build() {
+            return new TestEnvironmentSettings(connectorJarPaths, savepointRestorePath);
+        }
     }
 }

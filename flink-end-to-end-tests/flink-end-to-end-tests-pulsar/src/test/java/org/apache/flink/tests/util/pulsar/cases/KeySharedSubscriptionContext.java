@@ -29,8 +29,8 @@ import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicRange;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.range.FixedRangeGenerator;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestContext;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestEnvironment;
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
-import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 import org.apache.flink.tests.util.pulsar.common.KeyedPulsarPartitionDataWriter;
 
 import org.apache.pulsar.client.api.RegexSubscriptionMode;
@@ -87,7 +87,7 @@ public class KeySharedSubscriptionContext extends PulsarTestContext<String> {
     }
 
     @Override
-    public Source<String, ?, ?> createSource(TestingSourceOptions sourceOptions) {
+    public Source<String, ?, ?> createSource(TestingSourceSettings sourceSettings) {
         int keyHash = keyHash(key1);
         TopicRange range = new TopicRange(keyHash, keyHash);
 
@@ -101,7 +101,7 @@ public class KeySharedSubscriptionContext extends PulsarTestContext<String> {
                         .setSubscriptionType(SubscriptionType.Key_Shared)
                         .setSubscriptionName("pulsar-key-shared")
                         .setRangeGenerator(new FixedRangeGenerator(singletonList(range)));
-        if (sourceOptions.boundedness() == Boundedness.BOUNDED) {
+        if (sourceSettings.getBoundedness() == Boundedness.BOUNDED) {
             // Using latest stop cursor for making sure the source could be stopped.
             builder.setBoundedStopCursor(StopCursor.latest());
         }
@@ -110,8 +110,8 @@ public class KeySharedSubscriptionContext extends PulsarTestContext<String> {
     }
 
     @Override
-    public SourceSplitDataWriter<String> createSourceSplitDataWriter(
-            TestingSourceOptions sourceOptions) {
+    public ExternalSystemSplitDataWriter<String> createSourceSplitDataWriter(
+            TestingSourceSettings sourceSettings) {
         String topicName = "pulsar-" + index + "-key-shared";
         operator.createTopic(topicName, 1);
         index++;
@@ -126,12 +126,12 @@ public class KeySharedSubscriptionContext extends PulsarTestContext<String> {
 
     @Override
     public List<String> generateTestData(
-            TestingSourceOptions sourceOptions, int splitIndex, long seed) {
+            TestingSourceSettings sourceSettings, int splitIndex, long seed) {
         return generateStringTestData(splitIndex, seed);
     }
 
     @Override
-    public TypeInformation<String> getTestDataTypeInformation() {
+    public TypeInformation<String> getProducedType() {
         return TypeInformation.of(String.class);
     }
 

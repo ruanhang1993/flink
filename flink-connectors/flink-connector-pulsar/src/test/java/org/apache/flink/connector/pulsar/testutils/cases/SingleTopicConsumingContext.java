@@ -28,8 +28,8 @@ import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicNameUtils;
 import org.apache.flink.connector.pulsar.testutils.PulsarPartitionDataWriter;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestContext;
 import org.apache.flink.connector.pulsar.testutils.PulsarTestEnvironment;
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
-import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 
 import java.net.URL;
 import java.util.Collections;
@@ -51,7 +51,7 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
 
     private static final String TOPIC_NAME_PREFIX = "pulsar-single-topic";
     private final String topicName;
-    private final Map<Integer, SourceSplitDataWriter<String>> partitionToSplitWriter =
+    private final Map<Integer, ExternalSystemSplitDataWriter<String>> partitionToSplitWriter =
             new HashMap<>();
 
     private int numSplits = 0;
@@ -73,7 +73,7 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
     }
 
     @Override
-    public Source<String, ?, ?> createSource(TestingSourceOptions sourceOptions) {
+    public Source<String, ?, ?> createSource(TestingSourceSettings sourceSettings) {
         PulsarSourceBuilder<String> builder =
                 PulsarSource.builder()
                         .setDeserializationSchema(pulsarSchema(STRING))
@@ -82,7 +82,7 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
                         .setTopics(topicName)
                         .setSubscriptionType(Exclusive)
                         .setSubscriptionName("pulsar-single-topic");
-        if (sourceOptions.boundedness() == Boundedness.BOUNDED) {
+        if (sourceSettings.getBoundedness() == Boundedness.BOUNDED) {
             // Using latest stop cursor for making sure the source could be stopped.
             // This is required for SourceTestSuiteBase.
             builder.setBoundedStopCursor(StopCursor.latest());
@@ -92,8 +92,8 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
     }
 
     @Override
-    public SourceSplitDataWriter<String> createSourceSplitDataWriter(
-            TestingSourceOptions sourceOptions) {
+    public ExternalSystemSplitDataWriter<String> createSourceSplitDataWriter(
+            TestingSourceSettings sourceSettings) {
         if (numSplits == 0) {
             // Create the topic first.
             operator.createTopic(topicName, 1);
@@ -112,19 +112,19 @@ public class SingleTopicConsumingContext extends PulsarTestContext<String> {
 
     @Override
     public List<String> generateTestData(
-            TestingSourceOptions sourceOptions, int splitIndex, long seed) {
+            TestingSourceSettings sourceSettings, int splitIndex, long seed) {
         return generateStringTestData(splitIndex, seed);
     }
 
     @Override
-    public TypeInformation<String> getTestDataTypeInformation() {
+    public TypeInformation<String> getProducedType() {
         return TypeInformation.of(String.class);
     }
 
     @Override
     public void close() throws Exception {
         // Close writer.
-        for (SourceSplitDataWriter<String> writer : partitionToSplitWriter.values()) {
+        for (ExternalSystemSplitDataWriter<String> writer : partitionToSplitWriter.values()) {
             writer.close();
         }
 
