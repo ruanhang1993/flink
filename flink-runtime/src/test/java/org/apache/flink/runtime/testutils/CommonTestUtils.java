@@ -237,6 +237,9 @@ public class CommonTestUtils {
                     final JobDetailsInfo jobDetailsInfo = jobDetailsSupplier.get();
                     final Collection<JobDetailsInfo.JobVertexDetailsInfo> vertexInfos =
                             jobDetailsInfo.getJobVertexInfos();
+                    if (vertexInfos.size() == 0) {
+                        return false;
+                    }
                     for (JobDetailsInfo.JobVertexDetailsInfo vertexInfo : vertexInfos) {
                         final Integer numRunningTasks =
                                 vertexInfo.getTasksPerState().get(ExecutionState.RUNNING);

@@ -24,13 +24,13 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.time.Deadline;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.connector.sink.Sink;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
 import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
-import org.apache.flink.connectors.test.common.external.MetricQueryRestClient;
 import org.apache.flink.connectors.test.common.external.sink.DataStreamSinkExternalContext;
 import org.apache.flink.connectors.test.common.external.sink.ExternalSystemDataReader;
 import org.apache.flink.connectors.test.common.external.sink.TestingSinkSettings;
@@ -38,11 +38,17 @@ import org.apache.flink.connectors.test.common.junit.extensions.ConnectorTesting
 import org.apache.flink.connectors.test.common.junit.extensions.TestCaseInvocationContextProvider;
 import org.apache.flink.connectors.test.common.junit.extensions.TestLoggerExtension;
 import org.apache.flink.connectors.test.common.source.ListSource;
+import org.apache.flink.connectors.test.common.utils.MetricQueryer;
 import org.apache.flink.connectors.test.common.utils.TestDataMatchers;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.runtime.metrics.MetricNames;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.operators.collect.CollectResultIterator;
+import org.apache.flink.streaming.api.operators.collect.CollectSinkOperator;
+import org.apache.flink.streaming.api.operators.collect.CollectSinkOperatorFactory;
+import org.apache.flink.streaming.api.operators.collect.CollectStreamSink;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.TestInstance;
@@ -56,8 +62,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
@@ -65,13 +71,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.connectors.test.common.utils.TestDataMatchers.matchesMultipleSplitTestData;
-import static org.apache.flink.connectors.test.common.utils.TestUtils.doubleEquals;
 import static org.apache.flink.connectors.test.common.utils.TestUtils.appendResultData;
+import static org.apache.flink.connectors.test.common.utils.TestUtils.doubleEquals;
+import static org.apache.flink.connectors.test.common.utils.TestUtils.timeoutAssert;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.terminateJob;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.waitForAllTaskRunning;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.waitForJobStatus;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.waitUntilCondition;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 /**
  * Base class for sink test suite.
@@ -97,7 +103,7 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
     static ExecutorService executorService =
             Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
 
-    private final long jobExecuteTimeMs = 5000;
+    private final long jobExecuteTimeMs = 20000;
 
     // ----------------------------- Basic test cases ---------------------------------
 
@@ -124,29 +130,22 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                                 .setConnectorJarPaths(externalContext.getConnectorJarPaths())
                                 .build());
         execEnv.enableCheckpointing(50);
-        execEnv.fromSource(
-                        new ListSource<>(
-                                Boundedness.CONTINUOUS_UNBOUNDED, testRecords, testRecords.size()),
-                        WatermarkStrategy.noWatermarks(),
-                        "sourceTest")
+        execEnv.fromCollection(testRecords)
+                .name("sourceTest")
                 .setParallelism(1)
                 .returns(externalContext.getProducedType())
                 .sinkTo(tryCreateSink(externalContext, sinkSettings))
                 .name("sinkTest");
         final JobClient jobClient = execEnv.executeAsync("Sink Test");
 
-        try {
-            waitForJobStatus(
-                    jobClient,
-                    Collections.singletonList(JobStatus.RUNNING),
-                    Deadline.fromNow(Duration.ofSeconds(30)));
+        waitForJobStatus(
+                jobClient,
+                Collections.singletonList(JobStatus.FINISHED),
+                Deadline.fromNow(Duration.ofSeconds(30)));
 
-            // Check test result
-            List<T> target = sort(testRecords);
-            checkResult(externalContext.createSinkDataReader(sinkSettings), target, semantic);
-        } finally {
-            killJob(jobClient);
-        }
+        // Check test result
+        List<T> target = sort(testRecords);
+        checkResult(externalContext.createSinkDataReader(sinkSettings), target, semantic);
     }
 
     /**
@@ -242,37 +241,51 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                 .sinkTo(tryCreateSink(externalContext, sinkSettings))
                 .name("Sink restart test")
                 .setParallelism(beforeParallelism);
+        CollectResultIterator<T> iterator = addCollectSink(source);
         final JobClient jobClient = execEnv.executeAsync("Restart Test");
+        iterator.setJobClient(jobClient);
 
         // ------------------------------- Wait job to fail --------------------------- ----
+        String savepointDir;
+        try {
+            final MetricQueryer queryRestClient =
+                    new MetricQueryer(new Configuration(), executorService);
+            waitForAllTaskRunning(
+                    () ->
+                            queryRestClient.getJobDetails(
+                                    testEnv.getRestEndpoint(), jobClient.getJobID()),
+                    Deadline.fromNow(Duration.ofSeconds(30)));
 
-        waitForJobStatus(
-                jobClient,
-                Collections.singletonList(JobStatus.RUNNING),
-                Deadline.fromNow(Duration.ofSeconds(30)));
-
-        // wait committer to commit and wait external system to finish writing
-        Thread.sleep(jobExecuteTimeMs);
-
-        String savepointDir =
-                jobClient
-                        .stopWithSavepoint(true, testEnv.getCheckpointUri())
-                        .get(30, TimeUnit.SECONDS);
-        waitForJobStatus(
-                jobClient,
-                Collections.singletonList(JobStatus.FINISHED),
-                Deadline.fromNow(Duration.ofSeconds(30)));
+            timeoutAssert(
+                    executorService,
+                    () -> {
+                        int count = 0;
+                        while (count < numBeforeSuccess && iterator.hasNext()) {
+                            iterator.next();
+                            count++;
+                        }
+                        if (count < numBeforeSuccess) {
+                            throw new IllegalStateException(
+                                    String.format("Fail to get %d records.", numBeforeSuccess));
+                        }
+                    },
+                    30,
+                    TimeUnit.SECONDS);
+            savepointDir =
+                    jobClient
+                            .stopWithSavepoint(true, testEnv.getCheckpointUri())
+                            .get(30, TimeUnit.SECONDS);
+            waitForJobStatus(
+                    jobClient,
+                    Collections.singletonList(JobStatus.FINISHED),
+                    Deadline.fromNow(Duration.ofSeconds(30)));
+        } catch (Exception e) {
+            killJob(jobClient);
+            throw e;
+        }
 
         List<T> target = sort(testRecords.subList(0, numBeforeSuccess));
-        List<T> result =
-                sort(
-                        appendResultData(
-                                new ArrayList<>(),
-                                externalContext.createSinkDataReader(sinkSettings),
-                                target,
-                                30,
-                                semantic));
-        checkResult(result.iterator(), Arrays.asList(target), semantic, false);
+        checkResult(externalContext.createSinkDataReader(sinkSettings), target, semantic, false);
 
         // -------------------------------- Restart job -------------------------------------------
         final StreamExecutionEnvironment restartEnv =
@@ -298,13 +311,18 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                 .returns(externalContext.getProducedType())
                 .sinkTo(tryCreateSink(externalContext, sinkSettings))
                 .setParallelism(afterParallelism);
+        addCollectSink(restartSource);
         final JobClient restartJobClient = restartEnv.executeAsync("Restart Test");
 
         try {
             // Check the result
-            checkResult(externalContext.createSinkDataReader(sinkSettings), sort(testRecords), semantic);
+            checkResult(
+                    externalContext.createSinkDataReader(sinkSettings),
+                    sort(testRecords),
+                    semantic);
         } finally {
             killJob(restartJobClient);
+            iterator.close();
         }
     }
 
@@ -351,8 +369,8 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                 .name(sinkName)
                 .setParallelism(parallelism);
         final JobClient jobClient = env.executeAsync("Metrics Test");
-        final MetricQueryRestClient queryRestClient =
-                new MetricQueryRestClient(new Configuration(), executorService);
+        final MetricQueryer queryRestClient =
+                new MetricQueryer(new Configuration(), executorService);
         try {
             waitForAllTaskRunning(
                     () ->
@@ -409,32 +427,32 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
      * @param semantic the supported semantic, see {@link DeliveryGuarantee}
      */
     private void checkResult(
+            ExternalSystemDataReader<T> reader, List<T> testData, DeliveryGuarantee semantic)
+            throws Exception {
+        checkResult(reader, testData, semantic, true);
+    }
+
+    private void checkResult(
             ExternalSystemDataReader<T> reader,
             List<T> testData,
-            DeliveryGuarantee semantic) throws Exception {
+            DeliveryGuarantee semantic,
+            boolean testDataAllInResult)
+            throws Exception {
         final ArrayList<T> result = new ArrayList<>();
+        final TestDataMatchers.MultipleSplitDataMatcher<T> matcher =
+                matchesMultipleSplitTestData(
+                        Arrays.asList(testData), semantic, testDataAllInResult);
         waitUntilCondition(
                 () -> {
-                    sort(appendResultData(result, reader, testData, 30, semantic));
-                    TestDataMatchers.MultipleSplitDataMatcher<T> matcher =
-                            matchesMultipleSplitTestData(Arrays.asList(testData), semantic);
-                    return matcher.matches(result.iterator());
+                    appendResultData(result, reader, testData, 30, semantic);
+                    return matcher.matches(sort(result).iterator());
                 },
                 Deadline.fromNow(Duration.ofMillis(jobExecuteTimeMs)));
     }
 
-    private void checkResult(
-            Iterator<T> resultIterator,
-            List<List<T>> testData,
-            DeliveryGuarantee semantic,
-            boolean testDataAllInResult) {
-        assertThat(resultIterator)
-                .satisfies(matchesMultipleSplitTestData(testData, semantic, testDataAllInResult));
-    }
-
     /** Compare the metrics. */
     private boolean compareSinkMetrics(
-            MetricQueryRestClient queryRestClient,
+            MetricQueryer queryRestClient,
             TestEnvironment testEnv,
             JobID jobId,
             String sinkName,
@@ -481,5 +499,24 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
             // abort the test
             throw new TestAbortedException("Not support this test.", e);
         }
+    }
+
+    protected CollectResultIterator<T> addCollectSink(DataStream<T> stream) {
+        TypeSerializer<T> serializer =
+                stream.getType().createSerializer(stream.getExecutionConfig());
+        String accumulatorName = "dataStreamCollect_" + UUID.randomUUID();
+        CollectSinkOperatorFactory<T> factory =
+                new CollectSinkOperatorFactory<>(serializer, accumulatorName);
+        CollectSinkOperator<T> operator = (CollectSinkOperator<T>) factory.getOperator();
+        CollectStreamSink<T> sink = new CollectStreamSink<>(stream, factory);
+        sink.name("Data stream collect sink");
+        stream.getExecutionEnvironment().addOperator(sink.getTransformation());
+        CollectResultIterator<T> iterator =
+                new CollectResultIterator<>(
+                        operator.getOperatorIdFuture(),
+                        serializer,
+                        accumulatorName,
+                        stream.getExecutionEnvironment().getCheckpointConfig());
+        return iterator;
     }
 }

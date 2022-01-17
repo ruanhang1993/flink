@@ -25,6 +25,7 @@ import org.apache.flink.api.connector.source.SourceReaderContext;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connectors.test.common.source.split.ListSplit;
 import org.apache.flink.core.io.InputStatus;
+import org.apache.flink.metrics.Counter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +50,7 @@ public class ListSourceReader<T> implements SourceReader<T, ListSplit> {
 
     private List<T> elements;
     private Boundedness boundedness;
+    private Counter numRecordInCounter;
 
     public ListSourceReader(
             int successNum,
@@ -60,6 +62,7 @@ public class ListSourceReader<T> implements SourceReader<T, ListSplit> {
         this.numElementsEmitted = 0;
         this.elements = elements;
         this.boundedness = boundedness;
+        this.numRecordInCounter = context.metricGroup().getIOMetricGroup().getNumRecordsInCounter();
     }
 
     @Override
@@ -71,6 +74,7 @@ public class ListSourceReader<T> implements SourceReader<T, ListSplit> {
             if (numElementsEmitted < successNum || successCk) {
                 output.collect(elements.get(numElementsEmitted));
                 numElementsEmitted++;
+                numRecordInCounter.inc();
             }
             return MORE_AVAILABLE;
         }

@@ -32,13 +32,13 @@ import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connectors.test.common.environment.ClusterControllable;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
 import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
-import org.apache.flink.connectors.test.common.external.MetricQueryRestClient;
 import org.apache.flink.connectors.test.common.external.source.DataStreamSourceExternalContext;
 import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
 import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 import org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension;
 import org.apache.flink.connectors.test.common.junit.extensions.TestCaseInvocationContextProvider;
 import org.apache.flink.connectors.test.common.junit.extensions.TestLoggerExtension;
+import org.apache.flink.connectors.test.common.utils.MetricQueryer;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.runtime.metrics.MetricNames;
 import org.apache.flink.streaming.api.CheckpointingMode;
@@ -124,7 +124,8 @@ public abstract class SourceTestSuiteBase<T> {
     @TestTemplate
     @DisplayName("Test source with single split")
     public void testSourceSingleSplit(
-            TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext,
+            TestEnvironment testEnv,
+            DataStreamSourceExternalContext<T> externalContext,
             DeliveryGuarantee semantic)
             throws Exception {
         // Step 1: Preparation
@@ -173,7 +174,8 @@ public abstract class SourceTestSuiteBase<T> {
     @TestTemplate
     @DisplayName("Test source with multiple splits")
     public void testMultipleSplits(
-            TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext,
+            TestEnvironment testEnv,
+            DataStreamSourceExternalContext<T> externalContext,
             DeliveryGuarantee semantic)
             throws Exception {
         // Step 1: Preparation
@@ -439,8 +441,8 @@ public abstract class SourceTestSuiteBase<T> {
                         .setParallelism(splitNumber);
         dataStreamSource.addSink(new DiscardingSink<>());
         final JobClient jobClient = env.executeAsync("Metrics Test");
-        final MetricQueryRestClient queryRestClient =
-                new MetricQueryRestClient(new Configuration(), executorService);
+        final MetricQueryer queryRestClient =
+                new MetricQueryer(new Configuration(), executorService);
         try {
             waitForAllTaskRunning(
                     () ->
@@ -491,7 +493,8 @@ public abstract class SourceTestSuiteBase<T> {
     @TestTemplate
     @DisplayName("Test source with at least one idle parallelism")
     public void testIdleReader(
-            TestEnvironment testEnv, DataStreamSourceExternalContext<T> externalContext,
+            TestEnvironment testEnv,
+            DataStreamSourceExternalContext<T> externalContext,
             DeliveryGuarantee semantic)
             throws Exception {
         // Step 1: Preparation
@@ -694,7 +697,8 @@ public abstract class SourceTestSuiteBase<T> {
      * @return List of created writers
      */
     protected List<ExternalSystemSplitDataWriter<T>> createSourceSplitWriters(
-            int num, DataStreamSourceExternalContext<T> externalContext,
+            int num,
+            DataStreamSourceExternalContext<T> externalContext,
             TestingSourceSettings sourceSettings) {
         List<ExternalSystemSplitDataWriter<T>> list = new LinkedList<>();
         for (int i = 0; i < num; i++) {
@@ -770,7 +774,7 @@ public abstract class SourceTestSuiteBase<T> {
 
     /** Compare the metrics. */
     private boolean assertSourceMetrics(
-            MetricQueryRestClient queryRestClient,
+            MetricQueryer queryRestClient,
             TestEnvironment testEnv,
             JobID jobId,
             String sourceName,

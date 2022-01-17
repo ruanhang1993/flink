@@ -114,7 +114,8 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
         private final DeliveryGuarantee semantic;
 
         public TestResourceProvidingInvocationContext(
-                TestEnvironment testEnvironment, ExternalContext externalContext,
+                TestEnvironment testEnvironment,
+                ExternalContext externalContext,
                 DeliveryGuarantee semantic) {
             this.testEnvironment = testEnvironment;
             this.externalContext = externalContext;
@@ -226,7 +227,7 @@ public class TestCaseInvocationContextProvider implements TestTemplateInvocation
                 ParameterContext parameterContext, ExtensionContext extensionContext)
                 throws ParameterResolutionException {
             return isAssignableFromParameterType(
-                    ClusterControllable.class, parameterContext.getParameter().getType())
+                            ClusterControllable.class, parameterContext.getParameter().getType())
                     && isTestEnvironmentControllable(this.testEnvironment);
         }
 

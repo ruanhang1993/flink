@@ -21,6 +21,7 @@ package org.apache.flink.formats.avro;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.Source;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.file.src.FileSource;
 import org.apache.flink.connectors.test.common.TestResource;
 import org.apache.flink.connectors.test.common.environment.MiniClusterTestEnvironment;
@@ -31,6 +32,7 @@ import org.apache.flink.connectors.test.common.external.source.ExternalSystemSpl
 import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 import org.apache.flink.connectors.test.common.junit.annotations.Context;
 import org.apache.flink.connectors.test.common.junit.annotations.ExternalSystem;
+import org.apache.flink.connectors.test.common.junit.annotations.Semantic;
 import org.apache.flink.connectors.test.common.junit.annotations.TestEnv;
 import org.apache.flink.connectors.test.common.testsuites.SourceTestSuiteBase;
 import org.apache.flink.formats.avro.typeutils.AvroSchemaConverter;
@@ -65,6 +67,10 @@ import static org.apache.flink.formats.avro.AvroBulkFormatTestUtils.ROW_TYPE;
 public class AvroBulkFormatITCase extends SourceTestSuiteBase<RowData> {
 
     private static final RowDataSerializer SERIALIZER = new RowDataSerializer(ROW_TYPE);
+
+    @SuppressWarnings("unused")
+    @Semantic
+    DeliveryGuarantee[] semantics = new DeliveryGuarantee[] {DeliveryGuarantee.EXACTLY_ONCE};
 
     @SuppressWarnings("unused")
     @TestEnv

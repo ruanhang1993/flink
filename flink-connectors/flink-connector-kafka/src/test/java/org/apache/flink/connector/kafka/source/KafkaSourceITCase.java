@@ -28,8 +28,8 @@ import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
 import org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContextFactory;
-import org.apache.flink.connector.kafka.testutils.KafkaSourceTestEnv;
 import org.apache.flink.connector.kafka.source.testutils.table.KafkaTableSourceExternalContextFactory;
+import org.apache.flink.connector.kafka.testutils.KafkaSourceTestEnv;
 import org.apache.flink.connectors.test.common.environment.MiniClusterTestEnvironment;
 import org.apache.flink.connectors.test.common.external.DefaultContainerizedExternalSystem;
 import org.apache.flink.connectors.test.common.junit.annotations.Context;
@@ -321,14 +321,14 @@ public class KafkaSourceITCase {
         // kinds of external contexts.
         @SuppressWarnings("unused")
         @Context
-        KafkaSourceExternalContextFactory singleTopic =
-                new KafkaSourceExternalContextFactory(
+        KafkaTableSourceExternalContextFactory singleTopic =
+                new KafkaTableSourceExternalContextFactory(
                         kafka.getContainer(), Collections.emptyList(), PARTITION);
 
         @SuppressWarnings("unused")
         @Context
-        KafkaSourceExternalContextFactory multipleTopic =
-                new KafkaSourceExternalContextFactory(
+        KafkaTableSourceExternalContextFactory multipleTopic =
+                new KafkaTableSourceExternalContextFactory(
                         kafka.getContainer(), Collections.emptyList(), TOPIC);
 
         @Override

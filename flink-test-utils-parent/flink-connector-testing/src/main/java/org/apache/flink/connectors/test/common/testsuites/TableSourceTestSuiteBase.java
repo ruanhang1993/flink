@@ -124,7 +124,8 @@ public abstract class TableSourceTestSuiteBase extends AbstractTableTestSuiteBas
         int splitNum = 4;
         for (int i = 0; i < splitNum; i++) {
             testRecordCollections.add(
-                    generateAndWriteTestData(i, externalContext, sourceSettings, tableSchema, supportTypes));
+                    generateAndWriteTestData(
+                            i, externalContext, sourceSettings, tableSchema, supportTypes));
         }
 
         DataStream<Row> result =
@@ -200,7 +201,9 @@ public abstract class TableSourceTestSuiteBase extends AbstractTableTestSuiteBas
         final List<RowData> testRecords =
                 generateTestData(splitIndex, ThreadLocalRandom.current().nextLong(), supportTypes);
         LOG.debug("Writing {} records to external system", testRecords.size());
-        externalContext.createSplitRowDataWriter(sourceSettings, physicalDataType).writeRecords(testRecords);
+        externalContext
+                .createSplitRowDataWriter(sourceSettings, physicalDataType)
+                .writeRecords(testRecords);
         return testRecords;
     }
 

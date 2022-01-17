@@ -42,8 +42,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static org.apache.flink.connectors.test.common.utils.TestUtils.containSameVal;
 import static org.apache.flink.connectors.test.common.utils.TestUtils.appendResultData;
+import static org.apache.flink.connectors.test.common.utils.TestUtils.containSameVal;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 /** Base class for table sink test suites. */

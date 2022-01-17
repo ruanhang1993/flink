@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.connectors.test.common.external;
+package org.apache.flink.connectors.test.common.utils;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
@@ -45,14 +45,14 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
-/** The client is used to get job metrics by rest API. */
-public class MetricQueryRestClient {
-    private static final Logger LOG = LoggerFactory.getLogger(MetricQueryRestClient.class);
+/** The queryer is used to get job metrics by rest API. */
+public class MetricQueryer {
+    private static final Logger LOG = LoggerFactory.getLogger(MetricQueryer.class);
     private RestClient restClient;
 
-    public MetricQueryRestClient(Configuration configuration, Executor executor)
+    public MetricQueryer(Configuration configuration, Executor executor)
             throws ConfigurationException {
         restClient = new RestClient(configuration, executor);
     }
@@ -62,13 +62,58 @@ public class MetricQueryRestClient {
         String jmAddress = endpoint.getAddress();
         int jmPort = endpoint.getPort();
 
-        final JobDetailsHeaders detailsHeaders = JobDetailsHeaders.getInstance();
         final JobMessageParameters params = new JobMessageParameters();
         params.jobPathParameter.resolve(jobId);
 
         return restClient
                 .sendRequest(
-                        jmAddress, jmPort, detailsHeaders, params, EmptyRequestBody.getInstance())
+                        jmAddress,
+                        jmPort,
+                        JobDetailsHeaders.getInstance(),
+                        params,
+                        EmptyRequestBody.getInstance())
+                .get(30, TimeUnit.SECONDS);
+    }
+
+    public AggregatedMetricsResponseBody getMetricList(
+            TestEnvironment.Endpoint endpoint, JobID jobId, JobVertexID vertexId) throws Exception {
+        AggregatedSubtaskMetricsParameters subtaskMetricsParameters =
+                new AggregatedSubtaskMetricsParameters();
+        Iterator<MessagePathParameter<?>> pathParams =
+                subtaskMetricsParameters.getPathParameters().iterator();
+        ((JobIDPathParameter) pathParams.next()).resolve(jobId);
+        ((JobVertexIdPathParameter) pathParams.next()).resolve(vertexId);
+        return restClient
+                .sendRequest(
+                        endpoint.getAddress(),
+                        endpoint.getPort(),
+                        AggregatedSubtaskMetricsHeaders.getInstance(),
+                        subtaskMetricsParameters,
+                        EmptyRequestBody.getInstance())
+                .get(30, TimeUnit.SECONDS);
+    }
+
+    public AggregatedMetricsResponseBody getMetrics(
+            TestEnvironment.Endpoint endpoint, JobID jobId, JobVertexID vertexId, String filters)
+            throws Exception {
+        AggregatedSubtaskMetricsParameters subtaskMetricsParameters =
+                new AggregatedSubtaskMetricsParameters();
+        Iterator<MessagePathParameter<?>> pathParams =
+                subtaskMetricsParameters.getPathParameters().iterator();
+        ((JobIDPathParameter) pathParams.next()).resolve(jobId);
+        ((JobVertexIdPathParameter) pathParams.next()).resolve(vertexId);
+        MetricsFilterParameter metricFilter =
+                (MetricsFilterParameter)
+                        subtaskMetricsParameters.getQueryParameters().iterator().next();
+        metricFilter.resolveFromString(filters);
+
+        return restClient
+                .sendRequest(
+                        endpoint.getAddress(),
+                        endpoint.getPort(),
+                        AggregatedSubtaskMetricsHeaders.getInstance(),
+                        subtaskMetricsParameters,
+                        EmptyRequestBody.getInstance())
                 .get(30, TimeUnit.SECONDS);
     }
 
@@ -78,55 +123,23 @@ public class MetricQueryRestClient {
             String sourceOrSinkName,
             String metricName)
             throws Exception {
-        String jmAddress = endpoint.getAddress();
-        int jmPort = endpoint.getPort();
-
         // get job details, including the vertex id
-        JobMessageParameters jobMessageParameters = new JobMessageParameters();
-        jobMessageParameters.jobPathParameter.resolve(jobId);
-        JobDetailsInfo jobDetailsInfo =
-                restClient
-                        .sendRequest(
-                                jmAddress,
-                                jmPort,
-                                JobDetailsHeaders.getInstance(),
-                                jobMessageParameters,
-                                EmptyRequestBody.getInstance())
-                        .get(30, TimeUnit.SECONDS);
+        JobDetailsInfo jobDetailsInfo = getJobDetails(endpoint, jobId);
 
-        // get the vertex id for source
+        // get the vertex id for source/sink operator
         JobDetailsInfo.JobVertexDetailsInfo vertex =
                 jobDetailsInfo.getJobVertexInfos().stream()
                         .filter(v -> v.getName().contains(sourceOrSinkName))
                         .findAny()
                         .orElse(null);
-        assertFalse(vertex == null);
+        assertThat(vertex).isNotNull();
         JobVertexID vertexId = vertex.getJobVertexID();
 
-        // get metric name
-        AggregatedSubtaskMetricsParameters subtaskMetricsParameters =
-                new AggregatedSubtaskMetricsParameters();
-        Iterator<MessagePathParameter<?>> pathParams =
-                subtaskMetricsParameters.getPathParameters().iterator();
-        for (int i = 0; i < 2; i++) {
-            MessagePathParameter<?> pathParam = pathParams.next();
-            if (i == 0) {
-                ((JobIDPathParameter) pathParam).resolve(jobId);
-            } else {
-                ((JobVertexIdPathParameter) pathParam).resolve(vertexId);
-            }
-        }
+        // get the metric list
         AggregatedMetricsResponseBody metricsResponseBody =
-                restClient
-                        .sendRequest(
-                                jmAddress,
-                                jmPort,
-                                AggregatedSubtaskMetricsHeaders.getInstance(),
-                                subtaskMetricsParameters,
-                                EmptyRequestBody.getInstance())
-                        .get(30, TimeUnit.SECONDS);
+                getMetricList(endpoint, jobId, vertexId);
 
-        // query metric value
+        // get the metric query filters
         String queryParam =
                 metricsResponseBody.getMetrics().stream()
                         .filter(
@@ -143,21 +156,8 @@ public class MetricQueryRestClient {
                             metricName, sourceOrSinkName));
         }
 
-        MetricsFilterParameter metricFilter =
-                (MetricsFilterParameter)
-                        subtaskMetricsParameters.getQueryParameters().iterator().next();
-        metricFilter.resolveFromString(queryParam);
-
-        metricsResponseBody =
-                restClient
-                        .sendRequest(
-                                jmAddress,
-                                jmPort,
-                                AggregatedSubtaskMetricsHeaders.getInstance(),
-                                subtaskMetricsParameters,
-                                EmptyRequestBody.getInstance())
-                        .get(30, TimeUnit.SECONDS);
-
-        return metricsResponseBody.getMetrics().iterator().next().getSum();
+        AggregatedMetricsResponseBody metricsResponse =
+                getMetrics(endpoint, jobId, vertexId, queryParam);
+        return metricsResponse.getMetrics().iterator().next().getSum();
     }
 }

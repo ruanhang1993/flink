@@ -26,13 +26,10 @@ import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.sink.KafkaSinkBuilder;
 import org.apache.flink.connectors.test.common.external.sink.DataStreamSinkExternalContext;
-
-import org.apache.commons.lang3.exception.ExceptionUtils;
-
 import org.apache.flink.connectors.test.common.external.sink.ExternalSystemDataReader;
-
 import org.apache.flink.connectors.test.common.external.sink.TestingSinkSettings;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
