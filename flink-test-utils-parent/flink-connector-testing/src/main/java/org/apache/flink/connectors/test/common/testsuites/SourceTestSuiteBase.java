@@ -30,7 +30,6 @@ import org.apache.flink.api.connector.source.Source;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connectors.test.common.environment.ClusterControllable;
-import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
 import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.connectors.test.common.external.MetricQueryRestClient;
@@ -54,7 +53,6 @@ import org.apache.flink.streaming.api.operators.collect.CollectSinkOperatorFacto
 import org.apache.flink.streaming.api.operators.collect.CollectStreamSink;
 import org.apache.flink.util.CloseableIterator;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestTemplate;
@@ -79,10 +77,10 @@ import java.util.concurrent.TimeUnit;
 import static org.apache.flink.connectors.test.common.utils.TestDataMatchers.matchesMultipleSplitTestData;
 import static org.apache.flink.connectors.test.common.utils.TestUtils.doubleEquals;
 import static org.apache.flink.connectors.test.common.utils.TestUtils.timeoutAssert;
-import static org.apache.flink.connectors.test.common.utils.TestUtils.waitAndExecute;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.terminateJob;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.waitForAllTaskRunning;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.waitForJobStatus;
+import static org.apache.flink.runtime.testutils.CommonTestUtils.waitUntilCondition;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 /**
@@ -214,87 +212,6 @@ public abstract class SourceTestSuiteBase<T> {
     }
 
     /**
-     * Test connector source with discovering splits in the external system
-     *
-     * <p>This test will create 4 splits in the external system first, write test data to all
-     * splits, and consume back via a Flink job. After the job has been running, add an extra split
-     * to the source. Wait a time longer than the split discovery interval, and compare the result.
-     *
-     * <p>The number and order of records in each split consumed by Flink need to be identical to
-     * the test data written into the external system to pass this test. There's no requirement for
-     * record order across splits.
-     *
-     * <p>The flink job should continue running before the test ends.
-     */
-    @TestTemplate
-    @Disabled
-    @Deprecated
-    @DisplayName("Test source discovering splits")
-    public void testDiscoverSplits(
-            TestEnvironment testEnv,
-            DataStreamSourceExternalContext<T> externalContext,
-            DeliveryGuarantee semantic)
-            throws Exception {
-        TestingSourceOptions sourceOptions =
-                getTestingSourceOptions(Boundedness.CONTINUOUS_UNBOUNDED, semantic);
-        final int splitNumber = 4;
-        final List<List<T>> testRecordCollections = new ArrayList<>();
-        for (int i = 0; i < splitNumber; i++) {
-            testRecordCollections.add(generateAndWriteTestData(sourceOptions, i, externalContext));
-        }
-
-        final StreamExecutionEnvironment env =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths()));
-        env.enableCheckpointing(50);
-        final DataStreamSource<T> dataStreamSource =
-                env.fromSource(
-                                getSource(externalContext, sourceOptions),
-                                WatermarkStrategy.noWatermarks(),
-                                "Tested Source")
-                        .setParallelism(splitNumber);
-
-        // Since DataStream API doesn't expose job client for executeAndCollect(), we have
-        // to reuse these part of code to get both job client and result iterator :-(
-        // ------------------------------------ START ---------------------------------------------
-        TypeSerializer<T> serializer = dataStreamSource.getType().createSerializer(env.getConfig());
-        String accumulatorName = "dataStreamCollect_" + UUID.randomUUID();
-        CollectSinkOperatorFactory<T> factory =
-                new CollectSinkOperatorFactory<>(serializer, accumulatorName);
-        CollectSinkOperator<T> operator = (CollectSinkOperator<T>) factory.getOperator();
-        CollectResultIterator<T> iterator =
-                new CollectResultIterator<>(
-                        operator.getOperatorIdFuture(),
-                        serializer,
-                        accumulatorName,
-                        env.getCheckpointConfig());
-        CollectStreamSink<T> sink = new CollectStreamSink<>(dataStreamSource, factory);
-        sink.name("Data stream collect sink");
-        env.addOperator(sink.getTransformation());
-        final JobClient jobClient = env.executeAsync("TaskManager Failover Test");
-        iterator.setJobClient(jobClient);
-
-        waitForJobStatus(
-                jobClient,
-                Collections.singletonList(JobStatus.RUNNING),
-                Deadline.fromNow(Duration.ofSeconds(30)));
-
-        testRecordCollections.add(
-                generateAndWriteTestData(sourceOptions, splitNumber, externalContext));
-
-        judgeResultBySemantic(
-                iterator, testRecordCollections, semantic, getTestDataSize(testRecordCollections));
-
-        // Clean up
-        iterator.close();
-        terminateJob(jobClient, Duration.ofSeconds(30));
-        waitForJobStatus(
-                jobClient,
-                Collections.singletonList(JobStatus.CANCELED),
-                Deadline.fromNow(Duration.ofSeconds(30)));
-    }
-
-    /**
      * Test connector source restart from a savepoint.
      *
      * <p>This test will create 4 splits in the external system first, write test data to all
@@ -368,26 +285,31 @@ public abstract class SourceTestSuiteBase<T> {
             final int beforeParallelism,
             final int afterParallelism)
             throws Exception {
-        TestingSourceOptions sourceOptions =
-                getTestingSourceOptions(Boundedness.CONTINUOUS_UNBOUNDED, semantic);
+        TestingSourceSettings sourceSettings =
+                TestingSourceSettings.builder()
+                        .setBoundedness(Boundedness.CONTINUOUS_UNBOUNDED)
+                        .setDeliveryGuarantee(semantic)
+                        .build();
+        TestEnvironmentSettings envOptions =
+                TestEnvironmentSettings.builder()
+                        .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                        .build();
 
-        final StreamExecutionEnvironment execEnv =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths()));
+        final StreamExecutionEnvironment execEnv = testEnv.createExecutionEnvironment(envOptions);
         execEnv.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
         execEnv.enableCheckpointing(50);
         execEnv.setRestartStrategy(RestartStrategies.noRestart());
 
-        final List<SourceSplitDataWriter<T>> writers =
-                createSourceSplitWriters(externalContext, splitNumber);
+        final List<ExternalSystemSplitDataWriter<T>> writers =
+                createSourceSplitWriters(splitNumber, externalContext, sourceSettings);
         final List<List<T>> testRecordCollections = new ArrayList<>();
         for (int i = 0; i < splitNumber; i++) {
             testRecordCollections.add(
-                    generateTestDataForWriter(externalContext, sourceOptions, i, writers.get(i)));
+                    generateTestDataForWriter(externalContext, sourceSettings, i, writers.get(i)));
         }
         DataStreamSource<T> source =
                 execEnv.fromSource(
-                                getSource(externalContext, sourceOptions),
+                                tryCreateSource(externalContext, sourceSettings),
                                 WatermarkStrategy.noWatermarks(),
                                 "Tested Source")
                         .setParallelism(beforeParallelism);
@@ -425,21 +347,24 @@ public abstract class SourceTestSuiteBase<T> {
         final List<List<T>> newTestRecordCollections = new ArrayList<>();
         for (int i = 0; i < splitNumber; i++) {
             newTestRecordCollections.add(
-                    generateTestDataForWriter(externalContext, sourceOptions, i, writers.get(i)));
+                    generateTestDataForWriter(externalContext, sourceSettings, i, writers.get(i)));
         }
 
         // -------------------------------- Restart job-------------------------------------------
+        TestEnvironmentSettings restartEnvOptions =
+                TestEnvironmentSettings.builder()
+                        .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                        .setSavepointRestorePath(savepointDir)
+                        .build();
         final StreamExecutionEnvironment restartEnv =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(
-                                externalContext.getConnectorJarPaths(), savepointDir));
+                testEnv.createExecutionEnvironment(restartEnvOptions);
         restartEnv.enableCheckpointing(500);
         restartEnv.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
 
         DataStreamSource<T> restartSource =
                 restartEnv
                         .fromSource(
-                                getSource(externalContext, sourceOptions),
+                                tryCreateSource(externalContext, sourceSettings),
                                 WatermarkStrategy.noWatermarks(),
                                 "Tested Source")
                         .setParallelism(afterParallelism);
@@ -487,23 +412,28 @@ public abstract class SourceTestSuiteBase<T> {
             DeliveryGuarantee semantic)
             throws Exception {
 
-        TestingSourceOptions sourceOptions =
-                getTestingSourceOptions(Boundedness.CONTINUOUS_UNBOUNDED, semantic);
+        TestingSourceSettings sourceSettings =
+                TestingSourceSettings.builder()
+                        .setBoundedness(Boundedness.CONTINUOUS_UNBOUNDED)
+                        .setDeliveryGuarantee(semantic)
+                        .build();
+        TestEnvironmentSettings envOptions =
+                TestEnvironmentSettings.builder()
+                        .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                        .build();
         final int splitNumber = 4;
         final List<List<T>> testRecordCollections = new ArrayList<>();
         for (int i = 0; i < splitNumber; i++) {
-            testRecordCollections.add(generateAndWriteTestData(sourceOptions, i, externalContext));
+            testRecordCollections.add(generateAndWriteTestData(i, externalContext, sourceSettings));
         }
 
         // make sure use different names when executes multi times
         String sourceName = "metricTestSource" + testRecordCollections.hashCode();
-        final StreamExecutionEnvironment env =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths()));
+        final StreamExecutionEnvironment env = testEnv.createExecutionEnvironment(envOptions);
         env.enableCheckpointing(50);
         final DataStreamSource<T> dataStreamSource =
                 env.fromSource(
-                                getSource(externalContext, sourceOptions),
+                                tryCreateSource(externalContext, sourceSettings),
                                 WatermarkStrategy.noWatermarks(),
                                 sourceName)
                         .setParallelism(splitNumber);
@@ -518,11 +448,11 @@ public abstract class SourceTestSuiteBase<T> {
                                     testEnv.getRestEndpoint(), jobClient.getJobID()),
                     Deadline.fromNow(Duration.ofSeconds(30)));
 
-            waitAndExecute(
+            waitUntilCondition(
                     () -> {
                         // test metrics
                         try {
-                            assertSourceMetrics(
+                            return assertSourceMetrics(
                                     queryRestClient,
                                     testEnv,
                                     jobClient.getJobID(),
@@ -533,10 +463,11 @@ public abstract class SourceTestSuiteBase<T> {
                                     splitNumber,
                                     false);
                         } catch (Exception e) {
-                            throw new IllegalStateException("Error in metric test.", e);
+                            // skip failed assert try
+                            return false;
                         }
                     },
-                    5000);
+                    Deadline.fromNow(Duration.ofMillis(5000)));
         } finally {
             // Clean up
             killJob(jobClient);
@@ -593,7 +524,7 @@ public abstract class SourceTestSuiteBase<T> {
         // Step 4: Validate test data
         try (CloseableIterator<T> resultIterator = iteratorBuilder.build(jobClient)) {
             LOG.info("Checking test results");
-            judgeResultBySemantic(iterator, testRecordsLists, semantic, null);
+            judgeResultBySemantic(resultIterator, testRecordsLists, semantic, null);
         }
     }
 
@@ -690,8 +621,8 @@ public abstract class SourceTestSuiteBase<T> {
                 testRecordsAfterFailure.size());
 
         // Step 8: Clean up
-        CommonTestUtils.terminateJob(jobClient, Duration.ofSeconds(30));
-        CommonTestUtils.waitForJobStatus(
+        terminateJob(jobClient, Duration.ofSeconds(30));
+        waitForJobStatus(
                 jobClient,
                 Collections.singletonList(JobStatus.CANCELED),
                 Deadline.fromNow(Duration.ofSeconds(30)));
@@ -703,7 +634,7 @@ public abstract class SourceTestSuiteBase<T> {
     /**
      * Generate a set of test records and write it to the given split writer.
      *
-     * @param context External context
+     * @param externalContext External context
      * @return List of generated test records
      */
     protected List<T> generateAndWriteTestData(
@@ -762,11 +693,12 @@ public abstract class SourceTestSuiteBase<T> {
      * @param num the number of writers
      * @return List of created writers
      */
-    protected List<SourceSplitDataWriter<T>> createSourceSplitWriters(
-            DataStreamSourceExternalContext<T> externalContext, int num) {
-        List<SourceSplitDataWriter<T>> list = new LinkedList<>();
+    protected List<ExternalSystemSplitDataWriter<T>> createSourceSplitWriters(
+            int num, DataStreamSourceExternalContext<T> externalContext,
+            TestingSourceSettings sourceSettings) {
+        List<ExternalSystemSplitDataWriter<T>> list = new LinkedList<>();
         for (int i = 0; i < num; i++) {
-            list.add(externalContext.createSourceSplitDataWriter());
+            list.add(externalContext.createSourceSplitDataWriter(sourceSettings));
         }
         return list;
     }
@@ -781,12 +713,12 @@ public abstract class SourceTestSuiteBase<T> {
      */
     protected List<T> generateTestDataForWriter(
             DataStreamSourceExternalContext<T> externalContext,
-            TestingSourceOptions sourceOptions,
+            TestingSourceSettings sourceSettings,
             int splitIndex,
-            SourceSplitDataWriter<T> writer) {
+            ExternalSystemSplitDataWriter<T> writer) {
         final List<T> testRecordCollection =
                 externalContext.generateTestData(
-                        sourceOptions, splitIndex, ThreadLocalRandom.current().nextLong());
+                        sourceSettings, splitIndex, ThreadLocalRandom.current().nextLong());
         LOG.debug("Writing {} records to external system", testRecordCollection.size());
         writer.writeRecords(testRecordCollection);
         return testRecordCollection;
@@ -837,7 +769,7 @@ public abstract class SourceTestSuiteBase<T> {
     }
 
     /** Compare the metrics. */
-    private void assertSourceMetrics(
+    private boolean assertSourceMetrics(
             MetricQueryRestClient queryRestClient,
             TestEnvironment testEnv,
             JobID jobId,
@@ -854,25 +786,7 @@ public abstract class SourceTestSuiteBase<T> {
                         jobId,
                         sourceName,
                         MetricNames.IO_NUM_RECORDS_IN);
-        assertThat(doubleEquals(allRecordSize, sumNumRecordsIn)).isTrue();
-    }
-
-    private TestingSourceOptions getTestingSourceOptions(
-            Boundedness boundedness, DeliveryGuarantee deliveryGuarantee) {
-        return TestingSourceOptions.builder()
-                .withBoundedness(boundedness)
-                .withDeliveryGuarantee(deliveryGuarantee)
-                .build();
-    }
-
-    private Source<T, ?, ?> getSource(
-            DataStreamSourceExternalContext<T> context, TestingSourceOptions sourceOptions) {
-        try {
-            return context.createSource(sourceOptions);
-        } catch (UnsupportedOperationException e) {
-            // abort the test
-            throw new TestAbortedException("Not support this test.", e);
-        }
+        return doubleEquals(allRecordSize, sumNumRecordsIn);
     }
 
     private void killJob(JobClient jobClient) throws Exception {

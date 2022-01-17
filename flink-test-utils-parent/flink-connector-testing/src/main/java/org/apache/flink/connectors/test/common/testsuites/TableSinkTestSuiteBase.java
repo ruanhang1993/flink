@@ -20,10 +20,10 @@ package org.apache.flink.connectors.test.common.testsuites;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
+import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.connectors.test.common.external.sink.TableSinkExternalContext;
-import org.apache.flink.connectors.test.common.external.sink.TestingSinkOptions;
+import org.apache.flink.connectors.test.common.external.sink.TestingSinkSettings;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
@@ -36,13 +36,14 @@ import org.opentest4j.TestAbortedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.apache.flink.connectors.test.common.utils.TestUtils.containSameVal;
-import static org.apache.flink.connectors.test.common.utils.TestUtils.getResultData;
+import static org.apache.flink.connectors.test.common.utils.TestUtils.appendResultData;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 /** Base class for table sink test suites. */
@@ -90,10 +91,12 @@ public abstract class TableSinkTestSuiteBase extends AbstractTableTestSuiteBase 
             DeliveryGuarantee semantic,
             List<DataType> supportTypes)
             throws Exception {
-        TestingSinkOptions sinkOptions = getTestingSinkOptions(semantic);
+        TestingSinkSettings sinkOptions = getTestingSinkOptions(semantic);
         StreamExecutionEnvironment env =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths()));
+                testEnv.createExecutionEnvironment(
+                        TestEnvironmentSettings.builder()
+                                .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                                .build());
         StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
         Map<String, String> tableOptions = getTableOptions(externalContext, sinkOptions);
         String tableName = "TableSinkTest" + semantic.toString().replaceAll("-", "");
@@ -113,7 +116,8 @@ public abstract class TableSinkTestSuiteBase extends AbstractTableTestSuiteBase 
         assertThat(
                         containSameVal(
                                 expectedResult,
-                                getResultData(
+                                appendResultData(
+                                        new ArrayList<>(),
                                         externalContext.createSinkRowDataReader(
                                                 sinkOptions, getTableSchema(supportTypes)),
                                         expectedResult,
@@ -123,14 +127,14 @@ public abstract class TableSinkTestSuiteBase extends AbstractTableTestSuiteBase 
                 .isTrue();
     }
 
-    private TestingSinkOptions getTestingSinkOptions(DeliveryGuarantee deliveryGuarantee) {
-        return TestingSinkOptions.builder().withDeliveryGuarantee(deliveryGuarantee).build();
+    private TestingSinkSettings getTestingSinkOptions(DeliveryGuarantee deliveryGuarantee) {
+        return TestingSinkSettings.builder().setDeliveryGuarantee(deliveryGuarantee).build();
     }
 
     private Map<String, String> getTableOptions(
-            TableSinkExternalContext externalContext, TestingSinkOptions sinkOptions) {
+            TableSinkExternalContext externalContext, TestingSinkSettings sinkSettings) {
         try {
-            return externalContext.getTableOptions(sinkOptions);
+            return externalContext.getSinkTableOptions(sinkSettings);
         } catch (UnsupportedOperationException e) {
             // abort the test
             throw new TestAbortedException("Not support this test.", e);

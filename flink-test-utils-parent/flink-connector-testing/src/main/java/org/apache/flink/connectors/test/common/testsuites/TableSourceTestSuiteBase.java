@@ -21,10 +21,10 @@ package org.apache.flink.connectors.test.common.testsuites;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
+import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.connectors.test.common.external.source.TableSourceExternalContext;
-import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
@@ -104,15 +104,17 @@ public abstract class TableSourceTestSuiteBase extends AbstractTableTestSuiteBas
             DeliveryGuarantee semantic,
             List<DataType> supportTypes)
             throws Exception {
-        TestingSourceOptions sourceOptions =
+        TestingSourceSettings sourceSettings =
                 getTestingSourceOptions(Boundedness.CONTINUOUS_UNBOUNDED, semantic);
         StreamExecutionEnvironment env =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths()));
+                testEnv.createExecutionEnvironment(
+                        TestEnvironmentSettings.builder()
+                                .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                                .build());
         env.setRestartStrategy(RestartStrategies.noRestart());
 
         StreamTableEnvironment tEnv = StreamTableEnvironment.create(env);
-        Map<String, String> tableOptions = getTableOptions(externalContext, sourceOptions);
+        Map<String, String> tableOptions = getTableOptions(externalContext, sourceSettings);
         String tableName = "TableSourceTest" + semantic.toString().replaceAll("-", "");
         String createTableSql = getCreateTableSql(tableName, tableOptions, supportTypes);
         tEnv.executeSql(createTableSql);
@@ -122,7 +124,7 @@ public abstract class TableSourceTestSuiteBase extends AbstractTableTestSuiteBas
         int splitNum = 4;
         for (int i = 0; i < splitNum; i++) {
             testRecordCollections.add(
-                    generateAndWriteTestData(i, externalContext, tableSchema, supportTypes));
+                    generateAndWriteTestData(i, externalContext, sourceSettings, tableSchema, supportTypes));
         }
 
         DataStream<Row> result =
@@ -192,12 +194,13 @@ public abstract class TableSourceTestSuiteBase extends AbstractTableTestSuiteBas
     protected List<RowData> generateAndWriteTestData(
             int splitIndex,
             TableSourceExternalContext externalContext,
+            TestingSourceSettings sourceSettings,
             DataType physicalDataType,
             List<DataType> supportTypes) {
         final List<RowData> testRecords =
                 generateTestData(splitIndex, ThreadLocalRandom.current().nextLong(), supportTypes);
         LOG.debug("Writing {} records to external system", testRecords.size());
-        externalContext.createSplitRowDataWriter(physicalDataType).writeRecords(testRecords);
+        externalContext.createSplitRowDataWriter(sourceSettings, physicalDataType).writeRecords(testRecords);
         return testRecords;
     }
 
@@ -214,18 +217,18 @@ public abstract class TableSourceTestSuiteBase extends AbstractTableTestSuiteBas
         return testRecords;
     }
 
-    private TestingSourceOptions getTestingSourceOptions(
+    private TestingSourceSettings getTestingSourceOptions(
             Boundedness boundedness, DeliveryGuarantee deliveryGuarantee) {
-        return TestingSourceOptions.builder()
-                .withDeliveryGuarantee(deliveryGuarantee)
-                .withBoundedness(boundedness)
+        return TestingSourceSettings.builder()
+                .setDeliveryGuarantee(deliveryGuarantee)
+                .setBoundedness(boundedness)
                 .build();
     }
 
     private Map<String, String> getTableOptions(
-            TableSourceExternalContext externalContext, TestingSourceOptions sourceOptions) {
+            TableSourceExternalContext externalContext, TestingSourceSettings sourceSettings) {
         try {
-            return externalContext.getSourceTableOptions(sourceOptions);
+            return externalContext.getSourceTableOptions(sourceSettings);
         } catch (UnsupportedOperationException e) {
             // abort the test
             throw new TestAbortedException("Not support this test.", e);

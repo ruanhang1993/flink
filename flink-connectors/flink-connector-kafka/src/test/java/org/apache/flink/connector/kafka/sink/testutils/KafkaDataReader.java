@@ -18,7 +18,7 @@
 
 package org.apache.flink.connector.kafka.sink.testutils;
 
-import org.apache.flink.connectors.test.common.external.sink.SinkDataReader;
+import org.apache.flink.connectors.test.common.external.sink.ExternalSystemDataReader;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.Properties;
 
 /** Kafka dataStream data reader. */
-public class KafkaDataReader implements SinkDataReader<String> {
+public class KafkaDataReader implements ExternalSystemDataReader<String> {
     private final KafkaConsumer<String, String> consumer;
 
     public KafkaDataReader(Properties properties, Collection<TopicPartition> partitions) {
@@ -45,11 +45,11 @@ public class KafkaDataReader implements SinkDataReader<String> {
     }
 
     @Override
-    public List<String> poll(long timeoutMs) {
+    public List<String> poll(Duration timeout) {
         List<String> result = new LinkedList<>();
         ConsumerRecords<String, String> consumerRecords;
         try {
-            consumerRecords = consumer.poll(Duration.ofMillis(timeoutMs));
+            consumerRecords = consumer.poll(timeout);
         } catch (WakeupException we) {
             return Collections.emptyList();
         }

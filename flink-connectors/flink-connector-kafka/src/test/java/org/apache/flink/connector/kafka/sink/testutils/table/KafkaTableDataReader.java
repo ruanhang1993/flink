@@ -20,7 +20,7 @@ package org.apache.flink.connector.kafka.sink.testutils.table;
 
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.connectors.test.common.external.sink.SinkDataReader;
+import org.apache.flink.connectors.test.common.external.sink.ExternalSystemDataReader;
 import org.apache.flink.formats.csv.CsvRowDataDeserializationSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
@@ -42,7 +42,7 @@ import java.util.Properties;
 import java.util.Set;
 
 /** Kafka table data reader. */
-public class KafkaTableDataReader implements SinkDataReader<RowData> {
+public class KafkaTableDataReader implements ExternalSystemDataReader<RowData> {
     private final KafkaConsumer<String, byte[]> consumer;
     private final DataType physicalDataType;
     private final DeserializationSchema<RowData> deserializer;
@@ -64,11 +64,11 @@ public class KafkaTableDataReader implements SinkDataReader<RowData> {
     }
 
     @Override
-    public List<RowData> poll(long timeoutMs) {
+    public List<RowData> poll(Duration timeout) {
         List<RowData> result = new LinkedList<>();
         ConsumerRecords<String, byte[]> consumerRecords;
         try {
-            consumerRecords = consumer.poll(Duration.ofMillis(10000L));
+            consumerRecords = consumer.poll(timeout);
         } catch (WakeupException we) {
             return Collections.emptyList();
         }

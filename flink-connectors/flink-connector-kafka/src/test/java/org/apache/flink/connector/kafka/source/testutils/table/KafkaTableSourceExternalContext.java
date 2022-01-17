@@ -20,9 +20,9 @@ package org.apache.flink.connector.kafka.source.testutils.table;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.kafka.source.testutils.KafkaSourceExternalContext;
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
 import org.apache.flink.connectors.test.common.external.source.TableSourceExternalContext;
-import org.apache.flink.connectors.test.common.external.source.TestingSourceOptions;
+import org.apache.flink.connectors.test.common.external.source.TestingSourceSettings;
 import org.apache.flink.formats.csv.CsvFormatFactory;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.factories.FactoryUtil;
@@ -64,19 +64,20 @@ public class KafkaTableSourceExternalContext extends KafkaSourceExternalContext
     }
 
     @Override
-    public Map<String, String> getSourceTableOptions(TestingSourceOptions sourceOptions) {
+    public Map<String, String> getSourceTableOptions(TestingSourceSettings sourceSettings) {
         Configuration conf = new Configuration();
         conf.set(FactoryUtil.CONNECTOR, IDENTIFIER);
         conf.set(PROPS_GROUP_ID, randomize(GROUP_ID_PREFIX));
         conf.set(PROPS_BOOTSTRAP_SERVERS, bootstrapServers);
         conf.set(FactoryUtil.FORMAT, CsvFormatFactory.IDENTIFIER);
-        conf.set(TOPIC_PATTERN, TOPIC_NAME_PATTERN_STR);
+        conf.set(TOPIC_PATTERN, TOPIC_NAME_PREFIX + ".*");
         conf.set(SCAN_STARTUP_MODE, EARLIEST_OFFSET);
         return conf.toMap();
     }
 
     @Override
-    public SourceSplitDataWriter<RowData> createSplitRowDataWriter(DataType physicalDataType) {
+    public ExternalSystemSplitDataWriter<RowData> createSplitRowDataWriter(
+            TestingSourceSettings sourceOptions, DataType physicalDataType) {
         KafkaTableDataWriter writer;
         try {
             switch (splitMappingMode) {

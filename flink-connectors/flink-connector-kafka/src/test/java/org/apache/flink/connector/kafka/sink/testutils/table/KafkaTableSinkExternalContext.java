@@ -22,9 +22,9 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.GenericTypeInfo;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.kafka.sink.testutils.KafkaSinkExternalContext;
-import org.apache.flink.connectors.test.common.external.sink.SinkDataReader;
+import org.apache.flink.connectors.test.common.external.sink.ExternalSystemDataReader;
 import org.apache.flink.connectors.test.common.external.sink.TableSinkExternalContext;
-import org.apache.flink.connectors.test.common.external.sink.TestingSinkOptions;
+import org.apache.flink.connectors.test.common.external.sink.TestingSinkSettings;
 import org.apache.flink.formats.csv.CsvFormatFactory;
 import org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions;
 import org.apache.flink.table.data.RowData;
@@ -64,7 +64,7 @@ public class KafkaTableSinkExternalContext extends KafkaSinkExternalContext
     }
 
     @Override
-    public Map<String, String> getTableOptions(TestingSinkOptions sinkOptions) {
+    public Map<String, String> getSinkTableOptions(TestingSinkSettings sinkSettings) {
         if (numSplits == 0) {
             createTopic(topicName, 1, (short) 1);
             numSplits++;
@@ -85,8 +85,8 @@ public class KafkaTableSinkExternalContext extends KafkaSinkExternalContext
     }
 
     @Override
-    public SinkDataReader<RowData> createSinkRowDataReader(
-            TestingSinkOptions sinkOptions, DataType physicalDataType) {
+    public ExternalSystemDataReader<RowData> createSinkRowDataReader(
+            TestingSinkSettings sinkSettings, DataType physicalDataType) {
         LOG.info("Fetching descriptions for topic: {}", topicName);
         final Map<String, TopicDescription> topicMetadata =
                 getTopicMetadata(Arrays.asList(topicName));
@@ -109,7 +109,7 @@ public class KafkaTableSinkExternalContext extends KafkaSinkExternalContext
         properties.setProperty(
                 ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
                 ByteArrayDeserializer.class.getCanonicalName());
-        if (DeliveryGuarantee.EXACTLY_ONCE.equals(sinkOptions.getDeliveryGuarantee())) {
+        if (DeliveryGuarantee.EXACTLY_ONCE.equals(sinkSettings.getDeliveryGuarantee())) {
             // default is read_uncommitted
             properties.setProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
         }

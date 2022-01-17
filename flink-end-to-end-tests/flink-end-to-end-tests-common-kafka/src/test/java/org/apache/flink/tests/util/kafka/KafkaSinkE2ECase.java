@@ -56,7 +56,7 @@ public class KafkaSinkE2ECase extends SinkTestSuiteBase<String> {
                     .fromContainer(
                             new KafkaContainer(DockerImageName.parse(DockerImageVersions.KAFKA))
                                     .withNetworkAliases(KAFKA_HOSTNAME))
-                    .bindWithFlinkContainer(flink.getFlinkContainer())
+                    .bindWithFlinkContainer(flink.getFlinkContainers().getJobManager())
                     .build();
 
     // Defines 2 External context Factories, so test cases will be invoked twice using these two

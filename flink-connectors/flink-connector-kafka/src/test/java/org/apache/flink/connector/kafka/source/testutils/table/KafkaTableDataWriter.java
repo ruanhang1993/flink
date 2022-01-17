@@ -20,7 +20,7 @@ package org.apache.flink.connector.kafka.source.testutils.table;
 
 import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connectors.test.common.external.source.SourceSplitDataWriter;
+import org.apache.flink.connectors.test.common.external.source.ExternalSystemSplitDataWriter;
 import org.apache.flink.formats.csv.CsvFormatFactory;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.DataType;
@@ -29,11 +29,11 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 
-import java.util.Collection;
+import java.util.List;
 import java.util.Properties;
 
 /** Kafka table data writer. */
-public class KafkaTableDataWriter implements SourceSplitDataWriter<RowData> {
+public class KafkaTableDataWriter implements ExternalSystemSplitDataWriter<RowData> {
 
     private final KafkaProducer<byte[], byte[]> kafkaProducer;
     private final TopicPartition topicPartition;
@@ -54,7 +54,7 @@ public class KafkaTableDataWriter implements SourceSplitDataWriter<RowData> {
     }
 
     @Override
-    public void writeRecords(Collection<RowData> records) {
+    public void writeRecords(List<RowData> records) {
         for (RowData record : records) {
             ProducerRecord<byte[], byte[]> producerRecord =
                     new ProducerRecord<>(

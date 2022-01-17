@@ -26,6 +26,7 @@ import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettin
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
+import org.apache.flink.streaming.api.environment.RemoteStreamEnvironment;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.tests.util.flink.container.FlinkContainers;
 import org.apache.flink.tests.util.flink.container.FlinkContainersBuilder;
@@ -40,6 +41,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.configuration.HeartbeatManagerOptions.HEARTBEAT_INTERVAL;
+import static org.apache.flink.configuration.HeartbeatManagerOptions.HEARTBEAT_TIMEOUT;
+import static org.apache.flink.configuration.JobManagerOptions.SLOT_REQUEST_TIMEOUT;
 import static org.apache.flink.configuration.MetricOptions.METRIC_FETCHER_UPDATE_INTERVAL;
 import static org.apache.flink.configuration.TaskManagerOptions.NUM_TASK_SLOTS;
 
@@ -104,7 +108,7 @@ public class FlinkContainerTestEnvironment implements TestEnvironment, ClusterCo
                     flinkContainers.getJobManagerHost(),
                     flinkContainers.getJobManagerPort(),
                     null,
-                    jarPaths.toArray(new String[0])),
+                    jarPaths.toArray(new String[0]),
                     null,
                     SavepointRestoreSettings.forPath(envOptions.getSavepointRestorePath()));
         }

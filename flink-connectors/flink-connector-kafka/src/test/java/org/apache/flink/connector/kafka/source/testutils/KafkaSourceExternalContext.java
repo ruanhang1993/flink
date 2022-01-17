@@ -59,9 +59,9 @@ import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
 public class KafkaSourceExternalContext implements DataStreamSourceExternalContext<String> {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaSourceExternalContext.class);
-    private static final String TOPIC_NAME_PREFIX = "kafka-test-topic-";
-    private static final Pattern TOPIC_NAME_PATTERN = Pattern.compile(TOPIC_NAME_PREFIX + ".*");
-    private static final String GROUP_ID_PREFIX = "kafka-source-external-context-";
+    protected static final String TOPIC_NAME_PREFIX = "kafka-test-topic-";
+    protected static final Pattern TOPIC_NAME_PATTERN = Pattern.compile(TOPIC_NAME_PREFIX + ".*");
+    protected static final String GROUP_ID_PREFIX = "kafka-source-external-context-";
     private static final int NUM_RECORDS_UPPER_BOUND = 500;
     private static final int NUM_RECORDS_LOWER_BOUND = 100;
 

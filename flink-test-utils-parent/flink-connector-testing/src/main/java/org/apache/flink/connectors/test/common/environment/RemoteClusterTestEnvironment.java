@@ -19,7 +19,7 @@
 package org.apache.flink.connectors.test.common.environment;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.streaming.api.environment.RemoteStreamEnvironment;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
 import java.net.URL;
@@ -79,9 +79,7 @@ public class RemoteClusterTestEnvironment implements TestEnvironment {
     }
 
     @Override
-    public Endpoint getRestEndpoint() {
-        return this.endpoint;
-    }
+    public void startUp() {}
 
     @Override
     public void tearDown() {}

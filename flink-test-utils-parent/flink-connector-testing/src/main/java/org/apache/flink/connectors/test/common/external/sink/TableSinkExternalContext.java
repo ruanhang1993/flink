@@ -32,7 +32,7 @@ import java.util.Map;
  */
 public interface TableSinkExternalContext extends ExternalContext {
     /** Get table options for building DDL of the connector sink table. */
-    Map<String, String> getTableOptions(TestingSinkSettings sinkSettings)
+    Map<String, String> getSinkTableOptions(TestingSinkSettings sinkSettings)
             throws UnsupportedOperationException;
 
     /**

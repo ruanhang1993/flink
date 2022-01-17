@@ -321,19 +321,15 @@ public class KafkaSourceITCase {
         // kinds of external contexts.
         @SuppressWarnings("unused")
         @Context
-        KafkaTableSourceExternalContextFactory topicSplitContext =
-                new KafkaTableSourceExternalContextFactory(
-                        kafka.getContainer(),
-                        Collections.emptyList(),
-                        KafkaSourceExternalContext.SplitMappingMode.TOPIC);
+        KafkaSourceExternalContextFactory singleTopic =
+                new KafkaSourceExternalContextFactory(
+                        kafka.getContainer(), Collections.emptyList(), PARTITION);
 
         @SuppressWarnings("unused")
         @Context
-        KafkaTableSourceExternalContextFactory partitionSplitContext =
-                new KafkaTableSourceExternalContextFactory(
-                        kafka.getContainer(),
-                        Collections.emptyList(),
-                        KafkaSourceExternalContext.SplitMappingMode.PARTITION);
+        KafkaSourceExternalContextFactory multipleTopic =
+                new KafkaSourceExternalContextFactory(
+                        kafka.getContainer(), Collections.emptyList(), TOPIC);
 
         @Override
         public List<DataType> supportTypes() {

@@ -19,9 +19,7 @@
 package org.apache.flink.connectors.test.common.utils;
 
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connectors.test.common.external.sink.SinkDataReader;
-
-import org.junit.jupiter.api.function.Executable;
+import org.apache.flink.connectors.test.common.external.sink.ExternalSystemDataReader;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +27,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileAttribute;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -51,36 +50,22 @@ public class TestUtils {
         return tempPath.toFile();
     }
 
-    public static void waitAndExecute(Executable task, long timeMs) {
-        try {
-            Thread.sleep(timeMs);
-        } catch (InterruptedException e) {
-            // do nothing
-        }
-        try {
-            task.execute();
-        } catch (Throwable e) {
-            throw new IllegalStateException("Error to execute task.", e);
-        }
-    }
-
-    public static <T> List<T> getResultData(
-            SinkDataReader<T> reader,
+    public static <T> List<T> appendResultData(
+            List<T> result,
+            ExternalSystemDataReader<T> reader,
             List<T> expected,
             int retryTimes,
             DeliveryGuarantee semantic) {
         long timeoutMs = 1000L;
         int retryIndex = 0;
         if (EXACTLY_ONCE.equals(semantic)) {
-            List<T> result = new ArrayList<>();
             while (retryIndex++ < retryTimes && result.size() < expected.size()) {
-                result.addAll(reader.poll(timeoutMs));
+                result.addAll(reader.poll(Duration.ofMillis(timeoutMs)));
             }
             return result;
         } else if (AT_LEAST_ONCE.equals(semantic)) {
-            List<T> result = new ArrayList<>();
             while (retryIndex++ < retryTimes && !containSameVal(expected, result, semantic)) {
-                result.addAll(reader.poll(timeoutMs));
+                result.addAll(reader.poll(Duration.ofMillis(timeoutMs)));
             }
             return result;
         }

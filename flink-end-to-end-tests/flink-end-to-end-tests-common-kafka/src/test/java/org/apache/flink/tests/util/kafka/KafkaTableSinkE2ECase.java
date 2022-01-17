@@ -51,7 +51,7 @@ public class KafkaTableSinkE2ECase extends TableSinkTestSuiteBase {
                     .fromContainer(
                             new KafkaContainer(DockerImageName.parse(DockerImageVersions.KAFKA))
                                     .withNetworkAliases(KAFKA_HOSTNAME))
-                    .bindWithFlinkContainer(flink.getFlinkContainer())
+                    .bindWithFlinkContainer(flink.getFlinkContainers().getJobManager())
                     .build();
 
     @SuppressWarnings("unused")

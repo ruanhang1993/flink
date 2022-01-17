@@ -28,15 +28,17 @@ import org.apache.flink.api.connector.sink.Sink;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connectors.test.common.environment.ExecutionEnvironmentOptions;
 import org.apache.flink.connectors.test.common.environment.TestEnvironment;
+import org.apache.flink.connectors.test.common.environment.TestEnvironmentSettings;
 import org.apache.flink.connectors.test.common.external.MetricQueryRestClient;
 import org.apache.flink.connectors.test.common.external.sink.DataStreamSinkExternalContext;
-import org.apache.flink.connectors.test.common.external.sink.TestingSinkOptions;
+import org.apache.flink.connectors.test.common.external.sink.ExternalSystemDataReader;
+import org.apache.flink.connectors.test.common.external.sink.TestingSinkSettings;
 import org.apache.flink.connectors.test.common.junit.extensions.ConnectorTestingExtension;
 import org.apache.flink.connectors.test.common.junit.extensions.TestCaseInvocationContextProvider;
 import org.apache.flink.connectors.test.common.junit.extensions.TestLoggerExtension;
 import org.apache.flink.connectors.test.common.source.ListSource;
+import org.apache.flink.connectors.test.common.utils.TestDataMatchers;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.runtime.metrics.MetricNames;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
@@ -51,6 +53,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
@@ -63,11 +66,11 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.connectors.test.common.utils.TestDataMatchers.matchesMultipleSplitTestData;
 import static org.apache.flink.connectors.test.common.utils.TestUtils.doubleEquals;
-import static org.apache.flink.connectors.test.common.utils.TestUtils.getResultData;
-import static org.apache.flink.connectors.test.common.utils.TestUtils.waitAndExecute;
+import static org.apache.flink.connectors.test.common.utils.TestUtils.appendResultData;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.terminateJob;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.waitForAllTaskRunning;
 import static org.apache.flink.runtime.testutils.CommonTestUtils.waitForJobStatus;
+import static org.apache.flink.runtime.testutils.CommonTestUtils.waitUntilCondition;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 /**
@@ -111,13 +114,15 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
             DataStreamSinkExternalContext<T> externalContext,
             DeliveryGuarantee semantic)
             throws Exception {
-        TestingSinkOptions sinkOptions = getTestingSinkOptions(semantic);
-        final List<T> testRecords = generateTestData(sinkOptions, externalContext);
+        TestingSinkSettings sinkSettings = getTestingSinkSettings(semantic);
+        final List<T> testRecords = generateTestData(sinkSettings, externalContext);
 
         // Build and execute Flink job
         StreamExecutionEnvironment execEnv =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths()));
+                testEnv.createExecutionEnvironment(
+                        TestEnvironmentSettings.builder()
+                                .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                                .build());
         execEnv.enableCheckpointing(50);
         execEnv.fromSource(
                         new ListSource<>(
@@ -125,8 +130,8 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                         WatermarkStrategy.noWatermarks(),
                         "sourceTest")
                 .setParallelism(1)
-                .returns(externalContext.getTestDataTypeInformation())
-                .sinkTo(getSink(externalContext, sinkOptions))
+                .returns(externalContext.getProducedType())
+                .sinkTo(tryCreateSink(externalContext, sinkSettings))
                 .name("sinkTest");
         final JobClient jobClient = execEnv.executeAsync("Sink Test");
 
@@ -136,19 +141,9 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                     Collections.singletonList(JobStatus.RUNNING),
                     Deadline.fromNow(Duration.ofSeconds(30)));
 
-            // wait committer to commit and wait external system to finish writing
-            Thread.sleep(jobExecuteTimeMs);
-
             // Check test result
             List<T> target = sort(testRecords);
-            List<T> result =
-                    sort(
-                            getResultData(
-                                    externalContext.createSinkDataReader(sinkOptions),
-                                    testRecords,
-                                    30,
-                                    semantic));
-            judgeResultBySemantic(result.iterator(), Arrays.asList(target), semantic);
+            checkResult(externalContext.createSinkDataReader(sinkSettings), target, semantic);
         } finally {
             killJob(jobClient);
         }
@@ -223,13 +218,15 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
             final int beforeParallelism,
             final int afterParallelism)
             throws Exception {
-        TestingSinkOptions sinkOptions = getTestingSinkOptions(semantic);
+        TestingSinkSettings sinkSettings = getTestingSinkSettings(semantic);
         final StreamExecutionEnvironment execEnv =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths()));
+                testEnv.createExecutionEnvironment(
+                        TestEnvironmentSettings.builder()
+                                .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                                .build());
         execEnv.setRestartStrategy(RestartStrategies.noRestart());
 
-        final List<T> testRecords = generateTestData(sinkOptions, externalContext);
+        final List<T> testRecords = generateTestData(sinkSettings, externalContext);
         int numBeforeSuccess = testRecords.size() / 2;
         DataStreamSource<T> source =
                 execEnv.fromSource(
@@ -241,8 +238,8 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                                 "beforeRestartSource")
                         .setParallelism(1);
 
-        source.returns(externalContext.getTestDataTypeInformation())
-                .sinkTo(getSink(externalContext, sinkOptions))
+        source.returns(externalContext.getProducedType())
+                .sinkTo(tryCreateSink(externalContext, sinkSettings))
                 .name("Sink restart test")
                 .setParallelism(beforeParallelism);
         final JobClient jobClient = execEnv.executeAsync("Restart Test");
@@ -269,18 +266,21 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
         List<T> target = sort(testRecords.subList(0, numBeforeSuccess));
         List<T> result =
                 sort(
-                        getResultData(
-                                externalContext.createSinkDataReader(sinkOptions),
+                        appendResultData(
+                                new ArrayList<>(),
+                                externalContext.createSinkDataReader(sinkSettings),
                                 target,
                                 30,
                                 semantic));
-        judgeResultBySemantic(result.iterator(), Arrays.asList(target), semantic, false);
+        checkResult(result.iterator(), Arrays.asList(target), semantic, false);
 
         // -------------------------------- Restart job -------------------------------------------
         final StreamExecutionEnvironment restartEnv =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(
-                                externalContext.getConnectorJarPaths(), savepointDir));
+                testEnv.createExecutionEnvironment(
+                        TestEnvironmentSettings.builder()
+                                .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                                .setSavepointRestorePath(savepointDir)
+                                .build());
         restartEnv.enableCheckpointing(50);
 
         DataStreamSource<T> restartSource =
@@ -295,25 +295,17 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                         .setParallelism(1);
 
         restartSource
-                .returns(externalContext.getTestDataTypeInformation())
-                .sinkTo(getSink(externalContext, sinkOptions))
+                .returns(externalContext.getProducedType())
+                .sinkTo(tryCreateSink(externalContext, sinkSettings))
                 .setParallelism(afterParallelism);
         final JobClient restartJobClient = restartEnv.executeAsync("Restart Test");
 
-        // wait committer to commit and wait external system to finish writing
-        Thread.sleep(jobExecuteTimeMs);
-        killJob(restartJobClient);
-
-        // Check the result
-        target = sort(testRecords);
-        result =
-                sort(
-                        getResultData(
-                                externalContext.createSinkDataReader(sinkOptions),
-                                testRecords,
-                                30,
-                                semantic));
-        judgeResultBySemantic(result.iterator(), Arrays.asList(target), semantic);
+        try {
+            // Check the result
+            checkResult(externalContext.createSinkDataReader(sinkSettings), sort(testRecords), semantic);
+        } finally {
+            killJob(restartJobClient);
+        }
     }
 
     /**
@@ -331,15 +323,17 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
             DataStreamSinkExternalContext<T> externalContext,
             DeliveryGuarantee semantic)
             throws Exception {
-        TestingSinkOptions sinkOptions = getTestingSinkOptions(semantic);
+        TestingSinkSettings sinkSettings = getTestingSinkSettings(semantic);
         int parallelism = 2;
-        final List<T> testRecords = generateTestData(sinkOptions, externalContext);
+        final List<T> testRecords = generateTestData(sinkSettings, externalContext);
 
         // make sure use different names when executes multi times
         String sinkName = "metricTestSink" + testRecords.hashCode();
         final StreamExecutionEnvironment env =
-                testEnv.getExecutionEnvironment(
-                        new ExecutionEnvironmentOptions(externalContext.getConnectorJarPaths()));
+                testEnv.createExecutionEnvironment(
+                        TestEnvironmentSettings.builder()
+                                .setConnectorJarPaths(externalContext.getConnectorJarPaths())
+                                .build());
         env.enableCheckpointing(50);
 
         DataStreamSource<T> source =
@@ -352,8 +346,8 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                                 "metricTestSource")
                         .setParallelism(1);
 
-        source.returns(externalContext.getTestDataTypeInformation())
-                .sinkTo(getSink(externalContext, sinkOptions))
+        source.returns(externalContext.getProducedType())
+                .sinkTo(tryCreateSink(externalContext, sinkSettings))
                 .name(sinkName)
                 .setParallelism(parallelism);
         final JobClient jobClient = env.executeAsync("Metrics Test");
@@ -366,11 +360,11 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                                     testEnv.getRestEndpoint(), jobClient.getJobID()),
                     Deadline.fromNow(Duration.ofSeconds(30)));
 
-            waitAndExecute(
+            waitUntilCondition(
                     () -> {
                         // test metrics
                         try {
-                            assertSinkMetrics(
+                            return compareSinkMetrics(
                                     queryRestClient,
                                     testEnv,
                                     jobClient.getJobID(),
@@ -380,10 +374,11 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                                     parallelism,
                                     false);
                         } catch (Exception e) {
-                            throw new IllegalArgumentException("Error in assert metrics.", e);
+                            // skip failed assert try
+                            return false;
                         }
                     },
-                    5000);
+                    Deadline.fromNow(Duration.ofMillis(jobExecuteTimeMs)));
         } finally {
             // Clean up
             killJob(jobClient);
@@ -395,30 +390,40 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
     /**
      * Generate a set of test records.
      *
-     * @param testingSinkOptions
+     * @param testingSinkSettings sink settings
      * @param externalContext External context
      * @return Collection of generated test records
      */
     protected List<T> generateTestData(
-            TestingSinkOptions testingSinkOptions,
+            TestingSinkSettings testingSinkSettings,
             DataStreamSinkExternalContext<T> externalContext) {
         return externalContext.generateTestData(
-                testingSinkOptions, ThreadLocalRandom.current().nextLong());
+                testingSinkSettings, ThreadLocalRandom.current().nextLong());
     }
 
     /**
      * Compare the test data with the result.
      *
-     * @param resultIterator the data read from the job
+     * @param reader the data reader for the sink
      * @param testData the test data
      * @param semantic the supported semantic, see {@link DeliveryGuarantee}
      */
-    private void judgeResultBySemantic(
-            Iterator<T> resultIterator, List<List<T>> testData, DeliveryGuarantee semantic) {
-        assertThat(resultIterator).satisfies(matchesMultipleSplitTestData(testData, semantic));
+    private void checkResult(
+            ExternalSystemDataReader<T> reader,
+            List<T> testData,
+            DeliveryGuarantee semantic) throws Exception {
+        final ArrayList<T> result = new ArrayList<>();
+        waitUntilCondition(
+                () -> {
+                    sort(appendResultData(result, reader, testData, 30, semantic));
+                    TestDataMatchers.MultipleSplitDataMatcher<T> matcher =
+                            matchesMultipleSplitTestData(Arrays.asList(testData), semantic);
+                    return matcher.matches(result.iterator());
+                },
+                Deadline.fromNow(Duration.ofMillis(jobExecuteTimeMs)));
     }
 
-    private void judgeResultBySemantic(
+    private void checkResult(
             Iterator<T> resultIterator,
             List<List<T>> testData,
             DeliveryGuarantee semantic,
@@ -428,7 +433,7 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
     }
 
     /** Compare the metrics. */
-    private void assertSinkMetrics(
+    private boolean compareSinkMetrics(
             MetricQueryRestClient queryRestClient,
             TestEnvironment testEnv,
             JobID jobId,
@@ -441,7 +446,7 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
         double sumNumRecordsOut =
                 queryRestClient.getMetricByRestApi(
                         testEnv.getRestEndpoint(), jobId, sinkName, MetricNames.IO_NUM_RECORDS_OUT);
-        assertThat(doubleEquals(allRecordSize, sumNumRecordsOut)).isTrue();
+        return doubleEquals(allRecordSize, sumNumRecordsOut);
     }
 
     /** Sort the list. */
@@ -456,8 +461,8 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                 .collect(Collectors.toList());
     }
 
-    private TestingSinkOptions getTestingSinkOptions(DeliveryGuarantee deliveryGuarantee) {
-        return TestingSinkOptions.builder().withDeliveryGuarantee(deliveryGuarantee).build();
+    private TestingSinkSettings getTestingSinkSettings(DeliveryGuarantee deliveryGuarantee) {
+        return TestingSinkSettings.builder().setDeliveryGuarantee(deliveryGuarantee).build();
     }
 
     private void killJob(JobClient jobClient) throws Exception {
@@ -468,10 +473,10 @@ public abstract class SinkTestSuiteBase<T extends Comparable<T>> {
                 Deadline.fromNow(Duration.ofSeconds(30)));
     }
 
-    private Sink<T, ?, ?, ?> getSink(
-            DataStreamSinkExternalContext<T> context, TestingSinkOptions sinkOptions) {
+    private Sink<T, ?, ?, ?> tryCreateSink(
+            DataStreamSinkExternalContext<T> context, TestingSinkSettings sinkSettings) {
         try {
-            return context.createSink(sinkOptions);
+            return context.createSink(sinkSettings);
         } catch (UnsupportedOperationException e) {
             // abort the test
             throw new TestAbortedException("Not support this test.", e);

@@ -26,10 +26,13 @@ import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.sink.KafkaSinkBuilder;
 import org.apache.flink.connectors.test.common.external.sink.DataStreamSinkExternalContext;
-import org.apache.flink.connectors.test.common.external.sink.SinkDataReader;
-import org.apache.flink.connectors.test.common.external.sink.TestingSinkOptions;
 
 import org.apache.commons.lang3.exception.ExceptionUtils;
+
+import org.apache.flink.connectors.test.common.external.sink.ExternalSystemDataReader;
+
+import org.apache.flink.connectors.test.common.external.sink.TestingSinkSettings;
+
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -72,7 +75,7 @@ public class KafkaSinkExternalContext implements DataStreamSinkExternalContext<S
     protected String bootstrapServers;
     protected final String topicName;
 
-    private final List<SinkDataReader> readers = new ArrayList<>();
+    private final List<ExternalSystemDataReader<String>> readers = new ArrayList<>();
 
     protected int numSplits = 0;
 
@@ -126,7 +129,7 @@ public class KafkaSinkExternalContext implements DataStreamSinkExternalContext<S
     }
 
     @Override
-    public Sink<String, ?, ?, ?> createSink(TestingSinkOptions sinkOptions) {
+    public Sink<String, ?, ?, ?> createSink(TestingSinkSettings sinkSettings) {
         if (!topicExists(topicName)) {
             createTopic(topicName, 4, (short) 1);
         }
@@ -135,7 +138,7 @@ public class KafkaSinkExternalContext implements DataStreamSinkExternalContext<S
         Properties properties = new Properties();
         properties.put(ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, 900000);
         builder.setBootstrapServers(bootstrapServers)
-                .setDeliverGuarantee(sinkOptions.getDeliveryGuarantee())
+                .setDeliverGuarantee(sinkSettings.getDeliveryGuarantee())
                 .setTransactionalIdPrefix("testingFramework")
                 .setKafkaProducerConfig(properties)
                 .setRecordSerializer(
@@ -147,7 +150,7 @@ public class KafkaSinkExternalContext implements DataStreamSinkExternalContext<S
     }
 
     @Override
-    public SinkDataReader<String> createSinkDataReader(TestingSinkOptions sinkOptions) {
+    public ExternalSystemDataReader<String> createSinkDataReader(TestingSinkSettings sinkSettings) {
         LOG.info("Fetching descriptions for topic: {}", topicName);
         final Map<String, TopicDescription> topicMetadata =
                 getTopicMetadata(Arrays.asList(topicName));
@@ -170,7 +173,7 @@ public class KafkaSinkExternalContext implements DataStreamSinkExternalContext<S
         properties.setProperty(
                 ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
                 StringDeserializer.class.getCanonicalName());
-        if (DeliveryGuarantee.EXACTLY_ONCE.equals(sinkOptions.getDeliveryGuarantee())) {
+        if (DeliveryGuarantee.EXACTLY_ONCE.equals(sinkSettings.getDeliveryGuarantee())) {
             // default is read_uncommitted
             properties.setProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
         }
@@ -180,7 +183,7 @@ public class KafkaSinkExternalContext implements DataStreamSinkExternalContext<S
     }
 
     @Override
-    public List<String> generateTestData(TestingSinkOptions sinkOptions, long seed) {
+    public List<String> generateTestData(TestingSinkSettings sinkSettings, long seed) {
         Random random = new Random(seed);
         List<String> randomStringRecords = new ArrayList<>();
         int recordNum =
@@ -191,11 +194,6 @@ public class KafkaSinkExternalContext implements DataStreamSinkExternalContext<S
             randomStringRecords.add(generateRandomString(stringLength, random));
         }
         return randomStringRecords;
-    }
-
-    @Override
-    public TypeInformation<String> getTestDataTypeInformation() {
-        return TypeInformation.of(String.class);
     }
 
     private String generateRandomString(int length, Random random) {
@@ -252,5 +250,10 @@ public class KafkaSinkExternalContext implements DataStreamSinkExternalContext<S
     @Override
     public List<URL> getConnectorJarPaths() {
         return connectorJarPaths;
+    }
+
+    @Override
+    public TypeInformation<String> getProducedType() {
+        return TypeInformation.of(String.class);
     }
 }
