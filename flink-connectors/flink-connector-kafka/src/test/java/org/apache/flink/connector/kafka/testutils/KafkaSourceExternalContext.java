@@ -71,7 +71,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
     private final AdminClient adminClient;
     private final List<KafkaPartitionDataWriter> writers = new ArrayList<>();
 
-    KafkaSourceExternalContext(
+    protected KafkaSourceExternalContext(
             String bootstrapServers,
             SplitMappingMode splitMappingMode,
             List<URL> connectorJarPaths) {
@@ -165,7 +165,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
         return "KafkaSource-" + splitMappingMode.toString();
     }
 
-    private String randomize(String prefix) {
+    protected String randomize(String prefix) {
         return prefix + ThreadLocalRandom.current().nextLong(0, Long.MAX_VALUE);
     }
 
@@ -211,7 +211,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
         }
     }
 
-    private Properties getKafkaProducerProperties(int producerId) {
+    protected Properties getKafkaProducerProperties(int producerId) {
         Properties kafkaProducerProperties = new Properties();
         kafkaProducerProperties.setProperty(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
