@@ -165,7 +165,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
         return "KafkaSource-" + splitMappingMode.toString();
     }
 
-    protected String randomize(String prefix) {
+    private String randomize(String prefix) {
         return prefix + ThreadLocalRandom.current().nextLong(0, Long.MAX_VALUE);
     }
 
@@ -211,7 +211,7 @@ public class KafkaSourceExternalContext implements DataStreamSourceExternalConte
         }
     }
 
-    protected Properties getKafkaProducerProperties(int producerId) {
+    private Properties getKafkaProducerProperties(int producerId) {
         Properties kafkaProducerProperties = new Properties();
         kafkaProducerProperties.setProperty(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);

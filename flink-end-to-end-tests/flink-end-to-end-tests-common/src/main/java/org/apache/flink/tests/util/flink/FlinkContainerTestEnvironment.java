@@ -46,10 +46,10 @@ import static org.apache.flink.configuration.HeartbeatManagerOptions.HEARTBEAT_T
 import static org.apache.flink.configuration.JobManagerOptions.SLOT_REQUEST_TIMEOUT;
 import static org.apache.flink.configuration.MetricOptions.METRIC_FETCHER_UPDATE_INTERVAL;
 import static org.apache.flink.configuration.TaskManagerOptions.NUM_TASK_SLOTS;
-import static org.apache.flink.connector.testframe.utils.TestUtils.HEARTBEAT_INTERVAL_MS;
-import static org.apache.flink.connector.testframe.utils.TestUtils.HEARTBEAT_TIMEOUT_MS;
-import static org.apache.flink.connector.testframe.utils.TestUtils.METRIC_FETCHER_UPDATE_INTERVAL_MS;
-import static org.apache.flink.connector.testframe.utils.TestUtils.SLOT_REQUEST_TIMEOUT_MS;
+import static org.apache.flink.connector.testframe.utils.ConnectorTestConstants.HEARTBEAT_INTERVAL_MS;
+import static org.apache.flink.connector.testframe.utils.ConnectorTestConstants.HEARTBEAT_TIMEOUT_MS;
+import static org.apache.flink.connector.testframe.utils.ConnectorTestConstants.METRIC_FETCHER_UPDATE_INTERVAL_MS;
+import static org.apache.flink.connector.testframe.utils.ConnectorTestConstants.SLOT_REQUEST_TIMEOUT_MS;
 
 /** Test environment running job on {@link FlinkContainers}. */
 public class FlinkContainerTestEnvironment implements TestEnvironment, ClusterControllable {

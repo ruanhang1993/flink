@@ -18,34 +18,10 @@
 
 package org.apache.flink.connector.testframe.utils;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.FileAttribute;
-import java.util.List;
-import java.util.stream.Collectors;
-
-/** Test utils. */
-public class TestUtils {
+/** The default configuration values used in connector tests. */
+public class ConnectorTestConstants {
     public static final long METRIC_FETCHER_UPDATE_INTERVAL_MS = 1000L;
     public static final long SLOT_REQUEST_TIMEOUT_MS = 10000L;
     public static final long HEARTBEAT_TIMEOUT_MS = 5000L;
     public static final long HEARTBEAT_INTERVAL_MS = 1000L;
-
-    public static void deletePath(Path path) throws IOException {
-        List<File> files =
-                Files.walk(path)
-                        .filter(p -> p != path)
-                        .map(Path::toFile)
-                        .collect(Collectors.toList());
-        for (File file : files) {
-            if (file.isDirectory()) {
-                deletePath(file.toPath());
-            } else {
-                file.delete();
-            }
-        }
-        Files.deleteIfExists(path);
-    }
 }
