@@ -276,12 +276,12 @@ public class MetricOptions {
      * The scope format string that is applied to all metrics scoped to an operator coordinator on a
      * JobManager.
      */
-    public static final ConfigOption<String> SCOPE_NAMING_JM_JOB_OPERATOR_COORDINATOR =
-            key("metrics.scope.jm-job.operator-coordinator")
+    public static final ConfigOption<String> SCOPE_NAMING_OPERATOR_COORDINATOR =
+            key("metrics.scope.operator-coordinator")
                     .stringType()
                     .defaultValue("<host>.jobmanager.<job_name>.<operator_name>.coordinator")
                     .withDescription(
-                            "Defines the scope format string that is applied to all metrics scoped to a job on a JobManager.");
+                            "Defines the scope format string that is applied to all metrics scoped to an OperatorCoordinator on a JobManager.");
 
     /** The scope format string that is applied to all metrics scoped to a job on a TaskManager. */
     public static final ConfigOption<String> SCOPE_NAMING_TM_JOB =

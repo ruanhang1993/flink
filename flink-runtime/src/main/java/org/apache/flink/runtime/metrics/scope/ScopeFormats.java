@@ -106,7 +106,7 @@ public final class ScopeFormats {
         String taskFormat = config.getString(MetricOptions.SCOPE_NAMING_TASK);
         String operatorFormat = config.getString(MetricOptions.SCOPE_NAMING_OPERATOR);
         String operatorCoordinatorFormat =
-                config.getString(MetricOptions.SCOPE_NAMING_JM_JOB_OPERATOR_COORDINATOR);
+                config.getString(MetricOptions.SCOPE_NAMING_OPERATOR_COORDINATOR);
 
         return new ScopeFormats(
                 jmFormat,
