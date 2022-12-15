@@ -102,10 +102,22 @@ public abstract class SourceReaderBase<E, T, SplitT extends SourceSplit, SplitSt
     /** Indicating whether the SourceReader will be assigned more splits or not. */
     private boolean noMoreSplitsAssignment;
 
+    @Nullable protected final RecordEvaluator<T> eofRecordEvaluator;
+
     public SourceReaderBase(
             FutureCompletingBlockingQueue<RecordsWithSplitIds<E>> elementsQueue,
             SplitFetcherManager<E, SplitT> splitFetcherManager,
             RecordEmitter<E, T, SplitStateT> recordEmitter,
+            Configuration config,
+            SourceReaderContext context) {
+        this(elementsQueue, splitFetcherManager, recordEmitter, null, config, context);
+    }
+
+    public SourceReaderBase(
+            FutureCompletingBlockingQueue<RecordsWithSplitIds<E>> elementsQueue,
+            SplitFetcherManager<E, SplitT> splitFetcherManager,
+            RecordEmitter<E, T, SplitStateT> recordEmitter,
+            @Nullable RecordEvaluator<T> eofRecordEvaluator,
             Configuration config,
             SourceReaderContext context) {
         this.elementsQueue = elementsQueue;
@@ -116,6 +128,7 @@ public abstract class SourceReaderBase<E, T, SplitT extends SourceSplit, SplitSt
         this.config = config;
         this.context = context;
         this.noMoreSplitsAssignment = false;
+        this.eofRecordEvaluator = eofRecordEvaluator;
 
         numRecordsInCounter = context.metricGroup().getIOMetricGroup().getNumRecordsInCounter();
     }
