@@ -93,6 +93,14 @@ public class SingleThreadFetcherManager<E, SplitT extends SourceSplit>
         }
     }
 
+    @Override
+    public void finishSplits(List<SplitT> finishedSplits) {
+        SplitFetcher<E, SplitT> fetcher = getRunningFetcher();
+        if (fetcher != null) {
+            fetcher.finishSplits(finishedSplits);
+        }
+    }
+
     protected SplitFetcher<E, SplitT> getRunningFetcher() {
         return fetchers.isEmpty() ? null : fetchers.values().iterator().next();
     }

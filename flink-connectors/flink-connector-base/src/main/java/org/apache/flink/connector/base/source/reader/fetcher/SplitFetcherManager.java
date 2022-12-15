@@ -151,6 +151,8 @@ public abstract class SplitFetcherManager<E, SplitT extends SourceSplit> {
 
     public abstract void addSplits(List<SplitT> splitsToAdd);
 
+    public abstract void finishSplits(List<SplitT> finishedSplits);
+
     public void pauseOrResumeSplits(
             Collection<String> splitIdsToPause, Collection<String> splitIdsToResume) {
         for (SplitFetcher<E, SplitT> fetcher : fetchers.values()) {

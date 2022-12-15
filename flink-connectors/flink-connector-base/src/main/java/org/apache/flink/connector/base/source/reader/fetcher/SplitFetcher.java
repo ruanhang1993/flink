@@ -240,6 +240,21 @@ public class SplitFetcher<E, SplitT extends SourceSplit> implements Runnable {
     }
 
     /**
+     * Notice the split fetcher that some splits finished. This operation is asynchronous.
+     *
+     * @param finishedSplits the finished splits.
+     */
+    public void finishSplits(List<SplitT> finishedSplits) {
+        lock.lock();
+        try {
+            enqueueTaskUnsafe(new FinishSplitsTask<>(splitReader, finishedSplits, assignedSplits));
+            wakeUpUnsafe(true);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * Called when some splits of this source instance progressed too much beyond the global
      * watermark of all subtasks. If the split reader implements {@link SplitReader}, it will relay
      * the information asynchronously through the split fetcher thread.
