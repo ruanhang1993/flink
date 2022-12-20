@@ -28,6 +28,7 @@ import org.apache.flink.api.connector.source.mocks.MockSourceSplit;
 import org.apache.flink.api.connector.source.mocks.MockSourceSplitSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.source.reader.fetcher.SingleThreadFetcherManager;
+import org.apache.flink.connector.base.source.reader.mocks.MockRecordEvaluator;
 import org.apache.flink.connector.base.source.reader.mocks.MockSourceReader;
 import org.apache.flink.connector.base.source.reader.mocks.MockSplitReader;
 import org.apache.flink.connector.base.source.reader.mocks.PassThroughRecordEmitter;
@@ -63,6 +64,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.apache.flink.streaming.api.operators.source.TestingSourceOperator.createTestOperator;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -334,6 +337,55 @@ public class SourceReaderBaseTest extends SourceReaderTestBase<MockSourceSplit> 
 
         assertThat(output.watermarks).hasSize(3);
         assertThat(output.watermarks).containsExactly(150L, 250L, 300L);
+    }
+
+    @Test
+    void testMultipleSplitsWithFinishingByRecordEvaluator() throws Exception {
+        int split0End = 7;
+        int split1End = 15;
+        FutureCompletingBlockingQueue<RecordsWithSplitIds<int[]>> elementsQueue =
+                new FutureCompletingBlockingQueue<>();
+        MockSplitReader mockSplitReader =
+                MockSplitReader.newBuilder()
+                        .setNumRecordsPerSplitPerFetch(2)
+                        .setSeparatedFinishedRecord(false)
+                        .setBlockingFetch(false)
+                        .build();
+        MockSourceReader reader =
+                new MockSourceReader(
+                        elementsQueue,
+                        new SingleThreadFetcherManager<>(
+                                elementsQueue, () -> mockSplitReader, getConfig()),
+                        getConfig(),
+                        new TestingReaderContext(),
+                        new MockRecordEvaluator(i -> i == split0End || i == split1End));
+        reader.start();
+
+        List<MockSourceSplit> splits =
+                Arrays.asList(
+                        getSplit(0, 10, Boundedness.BOUNDED), getSplit(1, 12, Boundedness.BOUNDED));
+        reader.addSplits(splits);
+        reader.notifyNoMoreSplits();
+
+        TestingReaderOutput<Integer> output = new TestingReaderOutput<>();
+        while (true) {
+            InputStatus status = reader.pollNext(output);
+            if (status == InputStatus.END_OF_INPUT) {
+                break;
+            }
+            if (status == InputStatus.NOTHING_AVAILABLE) {
+                reader.isAvailable().get();
+            }
+        }
+        List<Integer> excepted =
+                IntStream.concat(
+                                IntStream.range(0, split0End + 1),
+                                IntStream.range(10, split1End + 1))
+                        .boxed()
+                        .collect(Collectors.toList());
+        assertThat(output.getEmittedRecords())
+                .containsExactlyInAnyOrder(
+                        excepted.toArray(new Integer[split0End + split1End - 8]));
     }
 
     // ---------------- helper methods -----------------

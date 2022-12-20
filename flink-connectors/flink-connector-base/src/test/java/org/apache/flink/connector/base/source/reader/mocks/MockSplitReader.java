@@ -24,6 +24,7 @@ import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsChange;
+import org.apache.flink.connector.base.source.reader.splitreader.SplitsDeletion;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -70,6 +71,8 @@ public class MockSplitReader implements SplitReader<int[], MockSourceSplit> {
     public void handleSplitsChanges(SplitsChange<MockSourceSplit> splitsChange) {
         if (splitsChange instanceof SplitsAddition) {
             splitsChange.splits().forEach(s -> splits.put(s.splitId(), s));
+        } else if (splitsChange instanceof SplitsDeletion) {
+            splitsChange.splits().forEach(s -> splits.remove(s.splitId()));
         } else {
             throw new IllegalArgumentException("Do not recognize split change: " + splitsChange);
         }
