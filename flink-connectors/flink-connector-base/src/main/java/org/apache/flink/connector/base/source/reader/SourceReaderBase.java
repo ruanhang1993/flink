@@ -423,6 +423,7 @@ public abstract class SourceReaderBase<E, T, SplitT extends SourceSplit, SplitSt
             if (recordEvaluator.isEndOfStream(record)) {
                 isStreamEnd = true;
                 splitFetcherManager.finishSplits(Collections.singletonList(split));
+                LOG.info("Split {} finished by RecordEvaluator.", split.splitId());
             }
         }
     }

@@ -25,6 +25,7 @@ import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsChange;
+import org.apache.flink.connector.base.source.reader.splitreader.SplitsDeletion;
 import org.apache.flink.connector.kafka.source.KafkaSourceOptions;
 import org.apache.flink.connector.kafka.source.metrics.KafkaSourceReaderMetrics;
 import org.apache.flink.connector.kafka.source.split.KafkaPartitionSplit;
@@ -164,14 +165,27 @@ public class KafkaPartitionSplitReader
 
     @Override
     public void handleSplitsChanges(SplitsChange<KafkaPartitionSplit> splitsChange) {
-        // Get all the partition assignments and stopping offsets.
-        if (!(splitsChange instanceof SplitsAddition)) {
+        if (splitsChange instanceof SplitsAddition) {
+            // Get all the partition assignments and stopping offsets.
+            handleSplitsAddition(splitsChange);
+        } else if (splitsChange instanceof SplitsDeletion) {
+            handleSplitsDeletion(splitsChange);
+        } else {
             throw new UnsupportedOperationException(
                     String.format(
                             "The SplitChange type of %s is not supported.",
                             splitsChange.getClass()));
         }
+    }
 
+    private void handleSplitsDeletion(SplitsChange<KafkaPartitionSplit> splitsDeletion) {
+        unassignPartitions(
+                splitsDeletion.splits().stream()
+                        .map(KafkaPartitionSplit::getTopicPartition)
+                        .collect(Collectors.toList()));
+    }
+
+    private void handleSplitsAddition(SplitsChange<KafkaPartitionSplit> splitsAddition) {
         // Assignment.
         List<TopicPartition> newPartitionAssignments = new ArrayList<>();
         // Starting offsets.
@@ -183,7 +197,7 @@ public class KafkaPartitionSplitReader
         Set<TopicPartition> partitionsStoppingAtCommitted = new HashSet<>();
 
         // Parse the starting and stopping offsets.
-        splitsChange
+        splitsAddition
                 .splits()
                 .forEach(
                         s -> {
@@ -214,7 +228,7 @@ public class KafkaPartitionSplitReader
         // After acquiring the starting and stopping offsets, remove the empty splits if necessary.
         removeEmptySplits();
 
-        maybeLogSplitChangesHandlingResult(splitsChange);
+        maybeLogSplitChangesHandlingResult(splitsAddition);
     }
 
     @Override

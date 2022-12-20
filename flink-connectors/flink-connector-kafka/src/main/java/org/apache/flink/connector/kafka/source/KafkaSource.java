@@ -31,6 +31,7 @@ import org.apache.flink.api.connector.source.SplitEnumerator;
 import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.base.source.reader.RecordEvaluator;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.kafka.source.enumerator.KafkaSourceEnumState;
@@ -98,11 +99,13 @@ public class KafkaSource<OUT>
     private final KafkaRecordDeserializationSchema<OUT> deserializationSchema;
     // The configurations.
     private final Properties props;
+    @Nullable private RecordEvaluator<OUT> recordEvaluator;
 
     KafkaSource(
             KafkaSubscriber subscriber,
             OffsetsInitializer startingOffsetsInitializer,
             @Nullable OffsetsInitializer stoppingOffsetsInitializer,
+            @Nullable RecordEvaluator<OUT> recordEvaluator,
             Boundedness boundedness,
             KafkaRecordDeserializationSchema<OUT> deserializationSchema,
             Properties props) {
@@ -112,6 +115,7 @@ public class KafkaSource<OUT>
         this.boundedness = boundedness;
         this.deserializationSchema = deserializationSchema;
         this.props = props;
+        this.recordEvaluator = recordEvaluator;
     }
 
     /**
@@ -167,7 +171,8 @@ public class KafkaSource<OUT>
                 recordEmitter,
                 toConfiguration(props),
                 readerContext,
-                kafkaSourceReaderMetrics);
+                kafkaSourceReaderMetrics,
+                recordEvaluator);
     }
 
     @Internal
