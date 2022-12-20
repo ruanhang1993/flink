@@ -80,6 +80,8 @@ public class SplitFetcher<E, SplitT extends SourceSplit> implements Runnable {
 
     private final boolean allowUnalignedSourceSplits;
 
+    private final Consumer<Collection<String>> splitFinishedHook;
+
     SplitFetcher(
             int id,
             FutureCompletingBlockingQueue<RecordsWithSplitIds<E>> elementsQueue,
@@ -94,6 +96,7 @@ public class SplitFetcher<E, SplitT extends SourceSplit> implements Runnable {
         this.errorHandler = checkNotNull(errorHandler);
         this.shutdownHook = checkNotNull(shutdownHook);
         this.allowUnalignedSourceSplits = allowUnalignedSourceSplits;
+        this.splitFinishedHook = splitFinishedHook;
 
         this.fetchTask =
                 new FetchTask<>(
@@ -247,7 +250,9 @@ public class SplitFetcher<E, SplitT extends SourceSplit> implements Runnable {
     public void finishSplits(List<SplitT> finishedSplits) {
         lock.lock();
         try {
-            enqueueTaskUnsafe(new FinishSplitsTask<>(splitReader, finishedSplits, assignedSplits));
+            enqueueTaskUnsafe(
+                    new FinishSplitsTask<>(
+                            splitReader, finishedSplits, assignedSplits, splitFinishedHook));
             wakeUpUnsafe(true);
         } finally {
             lock.unlock();
