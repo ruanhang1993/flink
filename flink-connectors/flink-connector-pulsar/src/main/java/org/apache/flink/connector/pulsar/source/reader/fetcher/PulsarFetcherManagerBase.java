@@ -76,6 +76,11 @@ public abstract class PulsarFetcherManagerBase
     }
 
     @Override
+    public void finishSplits(List<PulsarPartitionSplit> finishedSplits) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     protected void startFetcher(SplitFetcher<Message<byte[]>, PulsarPartitionSplit> fetcher) {
         if (fetcherStatus.get(fetcher.fetcherId()) != Boolean.TRUE) {
             fetcherStatus.put(fetcher.fetcherId(), true);
