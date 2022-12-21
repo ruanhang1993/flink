@@ -238,4 +238,10 @@ public class KafkaSource<OUT>
     KafkaSubscriber getKafkaSubscriber() {
         return subscriber;
     }
+
+    @VisibleForTesting
+    @Nullable
+    RecordEvaluator<OUT> getRecordEvaluator() {
+        return recordEvaluator;
+    }
 }
