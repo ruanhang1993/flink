@@ -25,6 +25,7 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.DeliveryGuarantee;
+import org.apache.flink.connector.base.source.reader.RecordEvaluator;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.KafkaSourceOptions;
@@ -43,6 +44,7 @@ import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartition
 import org.apache.flink.streaming.connectors.kafka.partitioner.FlinkFixedPartitioner;
 import org.apache.flink.streaming.connectors.kafka.partitioner.FlinkKafkaPartitioner;
 import org.apache.flink.streaming.connectors.kafka.table.KafkaConnectorOptions.ScanStartupMode;
+import org.apache.flink.streaming.connectors.kafka.testutils.MockRecordEvaluator;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.catalog.Column;
@@ -87,6 +89,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -208,7 +211,8 @@ public class KafkaDynamicTableFactoryTest {
                         KAFKA_SOURCE_PROPERTIES,
                         StartupMode.SPECIFIC_OFFSETS,
                         specificOffsets,
-                        0);
+                        0,
+                        null);
         assertThat(actualKafkaSource).isEqualTo(expectedKafkaSource);
 
         ScanTableSource.ScanRuntimeProvider provider =
@@ -250,7 +254,8 @@ public class KafkaDynamicTableFactoryTest {
                         KAFKA_SOURCE_PROPERTIES,
                         StartupMode.EARLIEST,
                         specificOffsets,
-                        0);
+                        0,
+                        null);
         final KafkaDynamicSource actualKafkaSource = (KafkaDynamicSource) actualSource;
         assertThat(actualKafkaSource).isEqualTo(expectedKafkaSource);
 
@@ -291,7 +296,8 @@ public class KafkaDynamicTableFactoryTest {
                         KAFKA_FINAL_SOURCE_PROPERTIES,
                         StartupMode.GROUP_OFFSETS,
                         Collections.emptyMap(),
-                        0);
+                        0,
+                        null);
 
         assertThat(actualSource).isEqualTo(expectedKafkaSource);
     }
@@ -342,7 +348,8 @@ public class KafkaDynamicTableFactoryTest {
                         KAFKA_FINAL_SOURCE_PROPERTIES,
                         StartupMode.GROUP_OFFSETS,
                         Collections.emptyMap(),
-                        0);
+                        0,
+                        null);
         expectedKafkaSource.producedDataType = SCHEMA_WITH_METADATA.toSourceRowDataType();
         expectedKafkaSource.metadataKeys = Collections.singletonList("timestamp");
 
@@ -391,6 +398,49 @@ public class KafkaDynamicTableFactoryTest {
                         String.format(
                                 "%s can not be set to %s. Valid values: [latest,earliest,none]",
                                 ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, errorStrategy));
+    }
+
+    @Test
+    public void testTableSourceWithRecordEvaluator() {
+        Map<String, String> tableOptions = getBasicSourceOptions();
+        tableOptions.put(
+                "scan.record.evaluator.class",
+                "org.apache.flink.streaming.connectors.kafka.testutils.MockRecordEvaluator");
+        final DynamicTableSource actualSource = createTableSource(SCHEMA, tableOptions);
+        final KafkaDynamicSource actualKafkaSource = (KafkaDynamicSource) actualSource;
+
+        final Map<KafkaTopicPartition, Long> specificOffsets = new HashMap<>();
+        specificOffsets.put(new KafkaTopicPartition(TOPIC, PARTITION_0), OFFSET_0);
+        specificOffsets.put(new KafkaTopicPartition(TOPIC, PARTITION_1), OFFSET_1);
+
+        final DecodingFormat<DeserializationSchema<RowData>> valueDecodingFormat =
+                new DecodingFormatMock(",", true);
+
+        // Test scan source equals
+        final KafkaDynamicSource expectedKafkaSource =
+                createExpectedScanSource(
+                        SCHEMA_DATA_TYPE,
+                        null,
+                        valueDecodingFormat,
+                        new int[0],
+                        new int[] {0, 1, 2},
+                        null,
+                        Collections.singletonList(TOPIC),
+                        null,
+                        KAFKA_SOURCE_PROPERTIES,
+                        StartupMode.SPECIFIC_OFFSETS,
+                        specificOffsets,
+                        0,
+                        new MockRecordEvaluator());
+        assertThat(actualKafkaSource).isEqualTo(expectedKafkaSource);
+        assertThat(
+                        Objects.requireNonNull(actualKafkaSource.getRecordEvaluator())
+                                .isEndOfStream(null))
+                .isTrue();
+
+        ScanTableSource.ScanRuntimeProvider provider =
+                actualKafkaSource.getScanRuntimeProvider(ScanRuntimeProviderContext.INSTANCE);
+        assertKafkaSource(provider);
     }
 
     private void testSetOffsetResetForStartFromGroupOffsets(String value) {
@@ -960,7 +1010,8 @@ public class KafkaDynamicTableFactoryTest {
             Properties properties,
             StartupMode startupMode,
             Map<KafkaTopicPartition, Long> specificStartupOffsets,
-            long startupTimestampMillis) {
+            long startupTimestampMillis,
+            @Nullable RecordEvaluator<RowData> recordEvaluator) {
         return new KafkaDynamicSource(
                 physicalDataType,
                 keyDecodingFormat,
@@ -975,7 +1026,8 @@ public class KafkaDynamicTableFactoryTest {
                 specificStartupOffsets,
                 startupTimestampMillis,
                 false,
-                FactoryMocks.IDENTIFIER.asSummaryString());
+                FactoryMocks.IDENTIFIER.asSummaryString(),
+                recordEvaluator);
     }
 
     private static KafkaDynamicSink createExpectedSink(

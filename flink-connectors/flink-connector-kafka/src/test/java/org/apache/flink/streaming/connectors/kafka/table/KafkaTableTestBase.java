@@ -33,6 +33,10 @@ import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.producer.Callback;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.After;
@@ -46,6 +50,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -53,6 +58,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /** Base class for Kafka Table IT Cases. */
@@ -144,6 +150,46 @@ public abstract class KafkaTableTestBase extends AbstractTestBase {
                             "Fail to create topic [%s partitions: %d replication factor: %d].",
                             topic, numPartitions, replicationFactor),
                     e);
+        }
+    }
+
+    public <K, V> void produceToKafka(
+            Collection<ProducerRecord<K, V>> records,
+            Class<? extends org.apache.kafka.common.serialization.Serializer<K>> keySerializerClass,
+            Class<? extends org.apache.kafka.common.serialization.Serializer<V>>
+                    valueSerializerClass)
+            throws Throwable {
+        Properties props = new Properties();
+        props.setProperty("bootstrap.servers", getBootstrapServers());
+        props.setProperty("group.id", "flink-tests");
+        props.setProperty("enable.auto.commit", "false");
+        props.setProperty("zookeeper.session.timeout.ms", String.valueOf(zkTimeoutMills));
+        props.setProperty("zookeeper.connection.timeout.ms", String.valueOf(zkTimeoutMills));
+        props.setProperty("auto.offset.reset", "earliest"); // read from the beginning.
+        props.setProperty("max.partition.fetch.bytes", "256");
+        props.put("enable.idempotence", "true");
+        props.put("acks", "all");
+        props.put("retries", "3");
+        props.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, keySerializerClass.getName());
+        props.setProperty(
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, valueSerializerClass.getName());
+
+        AtomicReference<Throwable> sendingError = new AtomicReference<>();
+        Callback callback =
+                (metadata, exception) -> {
+                    if (exception != null) {
+                        if (!sendingError.compareAndSet(null, exception)) {
+                            sendingError.get().addSuppressed(exception);
+                        }
+                    }
+                };
+        try (KafkaProducer<K, V> producer = new KafkaProducer<>(props)) {
+            for (ProducerRecord<K, V> record : records) {
+                producer.send(record, callback);
+            }
+        }
+        if (sendingError.get() != null) {
+            throw sendingError.get();
         }
     }
 

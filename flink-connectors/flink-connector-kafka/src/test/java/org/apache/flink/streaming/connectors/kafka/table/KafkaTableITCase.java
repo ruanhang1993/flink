@@ -18,6 +18,7 @@
 
 package org.apache.flink.streaming.connectors.kafka.table;
 
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.core.testutils.FlinkAssertions;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -32,7 +33,9 @@ import org.apache.flink.types.Row;
 
 import org.apache.kafka.clients.consumer.NoOffsetForPartitionException;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.assertj.core.api.Assertions;
 import org.junit.Before;
 import org.junit.Test;
@@ -55,7 +58,9 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static java.util.Collections.singletonList;
 import static org.apache.flink.core.testutils.CommonTestUtils.waitUtil;
+import static org.apache.flink.runtime.testutils.CommonTestUtils.waitForJobStatus;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaTableTestUtils.collectRows;
 import static org.apache.flink.streaming.connectors.kafka.table.KafkaTableTestUtils.readLines;
 import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_SOURCE_IDLE_TIMEOUT;
@@ -845,6 +850,93 @@ public class KafkaTableITCase extends KafkaTableTestBase {
     public void testStartFromGroupOffsetsNone() {
         Assertions.assertThatThrownBy(() -> testStartFromGroupOffsetsWithNoneResetStrategy())
                 .satisfies(FlinkAssertions.anyCauseMatches(NoOffsetForPartitionException.class));
+    }
+
+    @Test
+    public void testKafkaSourceWithRecordEvaluator() throws Throwable {
+        if (!"json".equals(format)) {
+            return;
+        }
+        final String tableName = "JsonTableWithRecordEvaluator";
+        final String sinkName = "myJsonSink";
+        final String topic =
+                "groupOffset_json_record_evaluator" + ThreadLocalRandom.current().nextLong();
+        String groupId = "jsonRecordEvaluator";
+        final int numRecordsPerPartition = 4;
+        final int numPartitions = 3;
+
+        TableResult tableResult = null;
+        try {
+            createTestTopic(topic, numPartitions, 1);
+
+            List<ProducerRecord<String, String>> records = new ArrayList<>();
+            List<String> excepted = new ArrayList<>();
+            for (int i = 0; i < numPartitions; i++) {
+                for (int j = 0; j < numRecordsPerPartition; j++) {
+                    records.add(
+                            new ProducerRecord<>(
+                                    topic,
+                                    i,
+                                    i * 1000L + j * 10,
+                                    topic,
+                                    String.format("{\"value\":\"%d\"}", j)));
+                    excepted.add(String.format("+I[%d, %d]", i, j));
+                }
+                records.add(
+                        new ProducerRecord<>(
+                                topic,
+                                i,
+                                i * 1000L + 100,
+                                topic,
+                                String.format("{\"value\":\"%s\"}", "End")));
+                excepted.add(String.format("+I[%d, End]", i));
+                records.add(
+                        new ProducerRecord<>(
+                                topic, i, i * 1000L + 200, topic, "{\"value\":\"test\"}"));
+            }
+            produceToKafka(records, StringSerializer.class, StringSerializer.class);
+
+            String bootstraps = getBootstrapServers();
+            tEnv.getConfig().set(TABLE_EXEC_SOURCE_IDLE_TIMEOUT, Duration.ofMillis(100));
+            final String createTableSql =
+                    "CREATE TABLE %s (\n"
+                            + "  `partition` INT METADATA VIRTUAL,\n"
+                            + "  `value` STRING\n"
+                            + ") WITH (\n"
+                            + "  'connector' = 'kafka',\n"
+                            + "  'topic' = '%s',\n"
+                            + "  'properties.bootstrap.servers' = '%s',\n"
+                            + "  'properties.group.id' = '%s',\n"
+                            + "  'scan.startup.mode' = 'earliest-offset',\n"
+                            + "  'scan.record.evaluator.class' = 'org.apache.flink.streaming.connectors.kafka.testutils.MockRecordEvaluator',\n"
+                            + "  'format' = 'json'\n"
+                            + ")";
+            tEnv.executeSql(String.format(createTableSql, tableName, topic, bootstraps, groupId));
+
+            // ---------- Consume stream from Kafka -------------------
+            env.setParallelism(1);
+            String createSink =
+                    "CREATE TABLE "
+                            + sinkName
+                            + "(\n"
+                            + "  `partition` INT,\n"
+                            + "  `value` STRING\n"
+                            + ") WITH (\n"
+                            + "  'connector' = 'values'\n"
+                            + ")";
+            tEnv.executeSql(createSink);
+
+            tableResult =
+                    tEnv.executeSql("INSERT INTO " + sinkName + " SELECT * FROM " + tableName);
+            KafkaTableTestUtils.waitingExpectedResults(sinkName, excepted, Duration.ofSeconds(15));
+            waitForJobStatus(tableResult.getJobClient().get(), singletonList(JobStatus.FINISHED));
+        } finally {
+            // ------------- cleanup -------------------
+            if (tableResult != null) {
+                tableResult.getJobClient().ifPresent(JobClient::cancel);
+            }
+            deleteTestTopic(topic);
+        }
     }
 
     private List<String> appendNewData(

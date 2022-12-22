@@ -610,7 +610,8 @@ public class UpsertKafkaDynamicTableFactoryTest extends TestLogger {
                 Collections.emptyMap(),
                 0,
                 true,
-                FactoryMocks.IDENTIFIER.asSummaryString());
+                FactoryMocks.IDENTIFIER.asSummaryString(),
+                null);
     }
 
     private static KafkaDynamicSink createExpectedSink(
