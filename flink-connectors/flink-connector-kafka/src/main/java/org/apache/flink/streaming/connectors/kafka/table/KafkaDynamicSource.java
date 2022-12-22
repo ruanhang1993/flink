@@ -19,12 +19,15 @@
 package org.apache.flink.streaming.connectors.kafka.table;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
+import org.apache.flink.connector.base.source.reader.RecordEvaluator;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.KafkaSourceBuilder;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.NoStoppingOffsetsInitializer;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -154,6 +157,8 @@ public class KafkaDynamicSource
 
     protected final String tableIdentifier;
 
+    @Nullable protected final RecordEvaluator<RowData> recordEvaluator;
+
     public KafkaDynamicSource(
             DataType physicalDataType,
             @Nullable DecodingFormat<DeserializationSchema<RowData>> keyDecodingFormat,
@@ -168,7 +173,8 @@ public class KafkaDynamicSource
             Map<KafkaTopicPartition, Long> specificStartupOffsets,
             long startupTimestampMillis,
             boolean upsertMode,
-            String tableIdentifier) {
+            String tableIdentifier,
+            @Nullable RecordEvaluator<RowData> recordEvaluator) {
         // Format attributes
         this.physicalDataType =
                 Preconditions.checkNotNull(
@@ -202,6 +208,7 @@ public class KafkaDynamicSource
         this.startupTimestampMillis = startupTimestampMillis;
         this.upsertMode = upsertMode;
         this.tableIdentifier = tableIdentifier;
+        this.recordEvaluator = recordEvaluator;
     }
 
     @Override
@@ -315,7 +322,8 @@ public class KafkaDynamicSource
                         specificStartupOffsets,
                         startupTimestampMillis,
                         upsertMode,
-                        tableIdentifier);
+                        tableIdentifier,
+                        recordEvaluator);
         copy.producedDataType = producedDataType;
         copy.metadataKeys = metadataKeys;
         copy.watermarkStrategy = watermarkStrategy;
@@ -427,6 +435,12 @@ public class KafkaDynamicSource
                 break;
         }
 
+        if (recordEvaluator != null) {
+            kafkaSourceBuilder
+                    .setBounded(new NoStoppingOffsetsInitializer())
+                    .setEofRecordEvaluator(recordEvaluator);
+        }
+
         kafkaSourceBuilder
                 .setProperties(properties)
                 .setDeserializer(KafkaRecordDeserializationSchema.of(kafkaDeserializer));
@@ -507,6 +521,12 @@ public class KafkaDynamicSource
             physicalFormatDataType = DataTypeUtils.stripRowPrefix(physicalFormatDataType, prefix);
         }
         return format.createRuntimeDecoder(context, physicalFormatDataType);
+    }
+
+    @VisibleForTesting
+    @Nullable
+    public RecordEvaluator<RowData> getRecordEvaluator() {
+        return recordEvaluator;
     }
 
     // --------------------------------------------------------------------------------------------

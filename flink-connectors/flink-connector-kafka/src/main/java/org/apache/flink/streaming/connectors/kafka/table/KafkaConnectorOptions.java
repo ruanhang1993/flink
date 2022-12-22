@@ -172,6 +172,12 @@ public class KafkaConnectorOptions {
                     .withDescription(
                             "Optional interval for consumer to discover dynamically created Kafka partitions periodically.");
 
+    public static final ConfigOption<String> SCAN_RECORD_EVALUATOR_CLASS =
+            ConfigOptions.key("scan.record.evaluator.class")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription("Record evaluator to decide the end of the Kafka stream.");
+
     // --------------------------------------------------------------------------------------------
     // Sink specific options
     // --------------------------------------------------------------------------------------------
