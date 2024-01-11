@@ -88,6 +88,13 @@ public final class FactoryUtil {
                     .withDescription(
                             "Version of the overall property design. This option is meant for future backwards compatibility.");
 
+    public static final ConfigOption<Integer> TABLE_PROPERTY_VERSION =
+            ConfigOptions.key("table.property.version")
+                    .intType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Version of the overall property design. This option is meant for future backwards compatibility.");
+
     public static final ConfigOption<String> CONNECTOR =
             ConfigOptions.key("connector")
                     .stringType()
@@ -593,6 +600,11 @@ public final class FactoryUtil {
     @SuppressWarnings("unchecked")
     public static <T extends Factory> T discoverFactory(
             ClassLoader classLoader, Class<T> factoryClass, String factoryIdentifier) {
+        return discoverFactory(classLoader, factoryClass, factoryIdentifier, null);
+    }
+    @SuppressWarnings("unchecked")
+    public static <T extends Factory> T discoverFactory(
+            ClassLoader classLoader, Class<T> factoryClass, String factoryIdentifier, @Nullable Integer factoryVersion) {
         final List<Factory> factories = discoverFactories(classLoader);
 
         final List<Factory> foundFactories =
@@ -610,6 +622,7 @@ public final class FactoryUtil {
         final List<Factory> matchingFactories =
                 foundFactories.stream()
                         .filter(f -> f.factoryIdentifier().equals(factoryIdentifier))
+                        .filter(f -> factoryVersion == null || f.factoryVersion().equals(factoryVersion))
                         .collect(Collectors.toList());
 
         if (matchingFactories.isEmpty()) {
@@ -772,11 +785,12 @@ public final class FactoryUtil {
     private static <T extends DynamicTableFactory> T discoverTableFactory(
             Class<T> factoryClass, DynamicTableFactory.Context context) {
         final String connectorOption = context.getCatalogTable().getOptions().get(CONNECTOR.key());
+        final String tablePropertyVersion = context.getCatalogTable().getOptions().get(TABLE_PROPERTY_VERSION.key());
         if (connectorOption == null) {
             return discoverManagedTableFactory(context.getClassLoader(), factoryClass);
         }
         try {
-            return discoverFactory(context.getClassLoader(), factoryClass, connectorOption);
+            return discoverFactory(context.getClassLoader(), factoryClass, connectorOption, tablePropertyVersion == null ? null : Integer.parseInt(tablePropertyVersion));
         } catch (ValidationException e) {
             throw enrichNoMatchingConnectorError(factoryClass, context, connectorOption);
         }
@@ -1090,6 +1104,7 @@ public final class FactoryUtil {
                     tableFactory,
                     context.getCatalogTable().getOptions(),
                     PROPERTY_VERSION,
+                    TABLE_PROPERTY_VERSION,
                     CONNECTOR);
             this.context = context;
             this.enrichingOptions = Configuration.fromMap(context.getEnrichmentOptions());

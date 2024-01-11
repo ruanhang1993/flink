@@ -83,4 +83,8 @@ public interface Factory {
      * <p>See the documentation of {@link Factory} for more information.
      */
     Set<ConfigOption<?>> optionalOptions();
+
+    default Integer factoryVersion() {
+        return 1;
+    }
 }
